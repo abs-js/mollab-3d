@@ -362,6 +362,7 @@ function step(dt){
     for(let i=0;i<c.molecules.length;i++) for(let j=i+1;j<c.molecules.length;j++){ const d=c.molecules[i].group.position.distanceTo(c.molecules[j].group.position); if(d<1.7&&d>0.001){ const push=c.molecules[i].group.position.clone().sub(c.molecules[j].group.position).normalize().multiplyScalar((1.7-d)*.5); c.molecules[i].group.position.add(push); c.molecules[j].group.position.sub(push); } }
   });
   if(Math.random()<scaled*1.4) reactions();
+  state.containers.forEach(c=>tryFuse(c,pressureOf(c),()=>{},scaled));
 }
 function reactions(){
   let changed=false;
@@ -394,35 +395,36 @@ function reactions(){
   });
   if(changed) renderContainerList();
 }
-function tryFuse(c,P,note){
-  const free=c.molecules.filter(m=>m.atoms.length===1&&!(m.flags&&m.flags.ion)&&m.flags&&(m.flags.isolated||m.flags.atom||m.flags.fragment));
-  if(free.length<2) return false;
-  if(c.temperature>1400) return false;
+function tryFuse(c,P,note,scaled){
+  if(!c||!P) return false;
+  const free=c.molecules.filter(m=>m.atoms.length===1&&!(m.flags&&m.flags.ion));
+  if(free.length<2||c.temperature>1400) return false;
   const EN={H:2.2,C:2.55,N:3.04,O:3.44,F:3.98,Na:0.93,Mg:1.31,P:2.19,S:2.58,Cl:3.16,K:0.82,Ca:1,Fe:1.83,Br:2.96,I:2.66};
   const IE={H:13.6,C:11.3,N:14.5,O:13.6,F:17.4,Na:5.1,Mg:7.6,P:10.5,S:10.4,Cl:13,K:4.3,Ca:6.1,Fe:7.9,Br:11.8,I:10.5};
   let best=null;
   for(let i=0;i<free.length;i++) for(let j=i+1;j<free.length;j++){
+    const dist=free[i].group.position.distanceTo(free[j].group.position);
+    if(dist>2.6) continue;
     const a=free[i].atoms[0].el, b=free[j].atoms[0].el;
     const dEN=Math.abs((EN[a]||2)-(EN[b]||2));
-    const ionic=dEN>=1.7&&(IE[a]||10)!==(IE[b]||10);
+    const ionic=dEN>=1.7;
     const diatomic=["H","N","O","F","Cl","Br","I"].includes(a)&&a===b;
-    const score=(diatomic?3:0)+(ionic?2.4:0)+dEN+(a==="H"||b==="H"?0.8:0);
-    if(!best||score>best.score) best={i:free[i],j:free[j],a,b,dEN,ionic,score};
+    const score=(diatomic?3:0)+(ionic?2.4:0)+dEN+(a==="H"||b==="H"?1:0)-dist;
+    if(!best||score>best.score) best={i:free[i],j:free[j],a,b,dEN,ionic,score,dist};
   }
   if(!best) return false;
-  const barrier=best.a==="H"&&best.b==="H"?180:best.ionic?240:320+best.dEN*40;
-  const minP=best.a==="H"&&best.b==="H"?0.04:0.08;
-  if(c.temperature<barrier||P.atm<minP){ note("fuse","isolated atoms present, but fusion needs about "+Math.round(barrier)+" K and "+minP.toFixed(2)+" atm."); return false; }
-  if(Math.random()>Math.min(0.8,0.25+P.atm*0.3)) return false;
-  const atoms=[best.a,best.b];
-  const built=assembleMolecule(atoms);
-  const formula=best.a===best.b?best.a+"2":[best.a,best.b].sort().join("");
+  const barrier=best.a==="H"&&best.b==="H"?80:best.ionic?200:280;
+  const minP=0.01;
+  if(c.temperature<barrier||P.atm<minP){ if(note) note("fuse","isolated atoms met, but fusion needs about "+Math.round(barrier)+" K and "+minP.toFixed(2)+" atm."); return false; }
+  if(Math.random()>Math.min(0.95,(scaled||0.02)*8)) return false;
+  const built=assembleMolecule([best.a,best.b]);
+  const formula=best.a===best.b?best.a+"2":(IE[best.a]<IE[best.b]?best.a+best.b:best.b+best.a);
   const known=state.library[formula]||state.library[best.a+best.b]||state.library[best.b+best.a];
   const pos=best.i.group.position.clone().add(best.j.group.position).multiplyScalar(.5);
   removeMol(best.i); removeMol(best.j);
-  const flags=best.ionic?{salt:true,fused:true}:{fused:true};
-  spawn(known&&known.atoms?known:{formula:known?known.formula:formula,name:(best.ionic?"Ionic ":"")+"fused "+formula,atoms:built.atoms,bonds:built.bonds,flags:flags},c,pos);
-  log(c.name+": fusion "+best.a+" + "+best.b+" → "+(known?known.formula:formula)+(best.ionic?" (ionic, ΔEN "+best.dEN.toFixed(2)+")":" (covalent, ΔEN "+best.dEN.toFixed(2)+")")+".");
+  spawn(known&&known.atoms&&known.atoms.length?known:{formula:formula,name:(best.ionic?"Ionic ":"")+"fused "+formula,atoms:built.atoms,bonds:built.bonds,flags:best.ionic?{salt:true,fused:true}:{fused:true}},c,pos);
+  log(c.name+": fusion "+best.a+" + "+best.b+" → "+formula+(best.ionic?" (ionic, ΔEN "+best.dEN.toFixed(2)+")":" (covalent, ΔEN "+best.dEN.toFixed(2)+")")+".");
+  renderContainerList();
   return true;
 }
 function tryCombustion(c,P,note){
