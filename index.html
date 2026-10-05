@@ -211,7 +211,7 @@
   <div>
     <h3 style="margin-top:0">Molecule</h3>
     <label class="field">Name <input id="molName" type="text" value="Sodium hydride"><b></b></label>
-    <label class="field">Formule <input id="molFormula" type="text" value="NaH"><b></b></label>
+    <label class="field">Fórmula <input id="molFormula" type="text" value="NaH"><b></b></label>
     <div class="chips" id="starters"></div>
     <h3>Bonds</h3>
     <div id="bondList" class="help"></div>
@@ -361,8 +361,8 @@ function step(dt){
     });
     for(let i=0;i<c.molecules.length;i++) for(let j=i+1;j<c.molecules.length;j++){ const d=c.molecules[i].group.position.distanceTo(c.molecules[j].group.position); if(d<1.7&&d>0.001){ const push=c.molecules[i].group.position.clone().sub(c.molecules[j].group.position).normalize().multiplyScalar((1.7-d)*.5); c.molecules[i].group.position.add(push); c.molecules[j].group.position.sub(push); } }
   });
+  if(state.playing) state.containers.forEach(c=>{ tryCombustion(c,pressureOf(c),noteOnce); tryFuse(c,pressureOf(c),noteOnce,scaled); });
   if(Math.random()<scaled*1.4) reactions();
-  state.containers.forEach(c=>tryFuse(c,pressureOf(c),()=>{},scaled));
 }
 function reactions(){
   let changed=false;
@@ -433,26 +433,29 @@ function tryFuse(c,P,note,scaled){
   renderContainerList();
   return true;
 }
+function noteOnce(id,msg){ const box=noteOnce.miss||(noteOnce.miss={}); const now=performance.now(); if(box[id]&&now-box[id]<4000) return; box[id]=now; log(msg); }
 function tryCombustion(c,P,note){
-  const ox=c.molecules.filter(m=>molKind(m)==="O2");
+  if(!c||!P) return false;
+  const ox=c.molecules.filter(m=>molKind(m)==="O2"||m.formula==="O2");
   const fuels=c.molecules.filter(isFuel);
   if(!ox.length||!fuels.length) return false;
   const plan=fuels.map(fuel=>({fuel,bal:balanceCombustion(atomCounts(fuel))})).find(x=>x.bal&&fuels.filter(f=>sameComp(f,x.fuel)).length>=x.bal.fuel&&ox.length>=x.bal.o2);
-  if(!plan) return false;
-  if(c.temperature<650||P.atm<0.15){ note("burn","fuel and O2 present, but need above 650 K and at least 0.15 atm."); return false; }
+  if(!plan){ note("burn-count","fuel and O2 are present, but the count does not balance yet (2 H2 + 1 O2, or 1 CH4 + 2 O2)."); return false; }
+  if(c.temperature<650||P.atm<0.15){ note("burn","fuel and O2 present, but need above 650 K and at least 0.15 atm. Now "+Math.round(c.temperature)+" K and "+P.atm.toFixed(3)+" atm."); return false; }
   const group=fuels.filter(f=>sameComp(f,plan.fuel)).slice(0,plan.bal.fuel);
   const usedOx=ox.slice(0,plan.bal.o2);
   const pos=group[0].group.position.clone();
   const products=plan.bal.co2+plan.bal.h2o+plan.bal.n2+plan.bal.so2;
-  if(c.molecules.length-group.length-usedOx.length+products>state.maxMols) return false;
+  if(c.molecules.length-group.length-usedOx.length+products>state.maxMols){ note("burn-limit","combustion blocked by the graphics limit."); return false; }
   group.concat(usedOx).forEach(removeMol);
   let i=0;
-  const put=(def)=>{ spawn(def,c,pos.clone().add(new THREE.Vector3((i%4)*0.9,Math.floor(i/4)*0.6,0))); i++; };
+  const put=(def)=>{ if(def) spawn(def,c,pos.clone().add(new THREE.Vector3((i%4)*0.9,Math.floor(i/4)*0.6,0))); i++; };
   for(let n=0;n<plan.bal.co2;n++) put(state.library.CO2);
   for(let n=0;n<plan.bal.h2o;n++) put(state.library.H2O);
   for(let n=0;n<plan.bal.n2;n++) put(state.library.N2);
   for(let n=0;n<plan.bal.so2;n++) put({formula:"SO2",name:"Sulfur dioxide",atoms:[{el:"S",x:0,y:0,z:0},{el:"O",x:-1.43,y:0,z:0},{el:"O",x:1.43,y:0,z:0}],bonds:[[0,1],[0,2]]});
-  log(c.name+": combustion "+plan.bal.fuel+" "+plan.fuel.formula+" + "+plan.bal.o2+" O2 → "+plan.bal.co2+" CO2 + "+plan.bal.h2o+" H2O"+(plan.bal.n2?" + "+plan.bal.n2+" N2":"")+(plan.bal.so2?" + "+plan.bal.so2+" SO2":"")+".");
+  log(c.name+": combustion "+plan.bal.fuel+" "+plan.fuel.formula+" + "+plan.bal.o2+" O2 → "+plan.bal.co2+" CO2 + "+plan.bal.h2o+" H2O.");
+  renderContainerList();
   return true;
 }
 function isFuel(m){
