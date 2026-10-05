@@ -237,6 +237,8 @@ const PRESETS = [
   mol("H2O","Water",[{el:"O",x:0,y:0,z:0},{el:"H",x:0.757,y:0.586,z:0},{el:"H",x:-0.757,y:0.586,z:0}],[[0,1],[0,2]],{solvent:true}),
   mol("NaCl","Sodium chloride",[{el:"Na",x:-1.2,y:0,z:0},{el:"Cl",x:1.2,y:0,z:0}],[[0,1]],{salt:true}),
   mol("HCl","Hydrochloric acid",[{el:"H",x:-0.64,y:0,z:0},{el:"Cl",x:0.64,y:0,z:0}],[[0,1]],{acid:true}),
+  mol("HF","Hydrogen fluoride",[{el:"H",x:-0.46,y:0,z:0},{el:"F",x:0.46,y:0,z:0}],[[0,1]],{acid:true}),
+  mol("F2","Fluorine",[{el:"F",x:-0.71,y:0,z:0},{el:"F",x:0.71,y:0,z:0}],[[0,1]]),
   mol("NaOH","Sodium hydroxide",[{el:"Na",x:-1.4,y:0,z:0},{el:"O",x:0.1,y:0,z:0},{el:"H",x:0.85,y:0.55,z:0}],[[0,1],[1,2]],{base:true}),
   mol("CO2","Carbon dioxide",[{el:"C",x:0,y:0,z:0},{el:"O",x:-1.16,y:0,z:0},{el:"O",x:1.16,y:0,z:0}],[[0,1],[0,2]]),
   mol("O2","Oxygen",[{el:"O",x:-0.6,y:0,z:0},{el:"O",x:0.6,y:0,z:0}],[[0,1]],{oxygen:true}),
@@ -361,7 +363,7 @@ function step(dt){
     });
     for(let i=0;i<c.molecules.length;i++) for(let j=i+1;j<c.molecules.length;j++){ const d=c.molecules[i].group.position.distanceTo(c.molecules[j].group.position); if(d<1.7&&d>0.001){ const push=c.molecules[i].group.position.clone().sub(c.molecules[j].group.position).normalize().multiplyScalar((1.7-d)*.5); c.molecules[i].group.position.add(push); c.molecules[j].group.position.sub(push); } }
   });
-  if(state.playing) state.containers.forEach(c=>{ tryCombustion(c,pressureOf(c),noteOnce); tryFuse(c,pressureOf(c),noteOnce,scaled); });
+  if(state.playing) state.containers.forEach(c=>{ tryCombustion(c,pressureOf(c),noteOnce); tryHf(c,pressureOf(c),noteOnce); tryFuse(c,pressureOf(c),noteOnce,scaled); });
   if(Math.random()<scaled*1.4) reactions();
 }
 function reactions(){
@@ -459,6 +461,28 @@ function tryCombustion(c,P,note){
   return true;
 }
 function atomCounts(m){ const counts={}; m.atoms.forEach(a=>counts[a.el]=(counts[a.el]||0)+1); return counts; }
+function tryHf(c,P,note){
+  if(!c||!P) return false;
+  const hf=c.molecules.filter(m=>molKind(m)==="acid"&&m.atoms.some(a=>a.el==="F"));
+  const nh3=c.molecules.filter(m=>molKind(m)==="NH3");
+  const h2=c.molecules.filter(m=>molKind(m)==="H2");
+  const f2=c.molecules.filter(m=>m.atoms.length===2&&m.atoms.every(a=>a.el==="F"));
+  if(h2.length&&f2.length){
+    if(c.temperature<250||P.atm<0.08){ note("hf-make","H2 and F2 present, but HF formation needs above 250 K and 0.08 atm."); return false; }
+    const pos=h2[0].group.position.clone();
+    removeMol(h2[0]); removeMol(f2[0]);
+    spawn(state.library.HF,c,pos); spawn(state.library.HF,c,pos.clone().add(new THREE.Vector3(1,0.3,0)));
+    log(c.name+": H2 + F2 → 2 HF."); renderContainerList(); return true;
+  }
+  if(hf.length&&nh3.length){
+    if(c.temperature<250||c.temperature>900||P.atm<0.08){ note("hf-nh3","HF and NH3 present, but need 250–900 K and 0.08 atm."); return false; }
+    const pos=hf[0].group.position.clone();
+    removeMol(hf[0]); removeMol(nh3[0]);
+    spawn({formula:"NH4F",name:"Ammonium fluoride",atoms:[{el:"N",x:0,y:0,z:0},{el:"H",x:0.6,y:0.6,z:0.6},{el:"H",x:0.6,y:-0.6,z:-0.6},{el:"H",x:-0.6,y:0.6,z:-0.6},{el:"H",x:-0.6,y:-0.6,z:0.6},{el:"F",x:1.6,y:0,z:0}],bonds:[[0,1],[0,2],[0,3],[0,4]],flags:{salt:true}},c,pos);
+    log(c.name+": HF + NH3 → NH4F."); renderContainerList(); return true;
+  }
+  return false;
+}
 function isFuel(m){
   if(m.flags&&m.flags.ion) return false;
   const k=molKind(m);
