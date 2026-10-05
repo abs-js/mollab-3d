@@ -9,14 +9,15 @@
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:"Segoe UI",system-ui,sans-serif; }
   body { overflow:hidden; }
-  #app { display:grid; grid-template-columns:300px minmax(0,1fr) 330px; grid-template-rows:58px minmax(0,1fr); height:100%; }
-  #app.left-closed { grid-template-columns:0 minmax(0,1fr) 330px; }
-  #app.right-closed { grid-template-columns: 300px 1fr 0; }
-  #app.left-closed.right-closed { grid-template-columns: 0 1fr 0; }
-  #app.left-closed #left, #app.right-closed #right { overflow:hidden; visibility:hidden; }
-  .edge { position:absolute; top:12px; z-index:5; width:34px; height:34px; padding:0; }
+  #app { position:relative; height:100%; }
+  header { height:58px; display:flex; align-items:center; gap:14px; padding:0 14px; border-bottom:1px solid var(--line); background:linear-gradient(90deg,#0b1730,#0c1222 62%,#102033); }
+  aside { position:absolute; top:58px; bottom:0; z-index:6; width:300px; background:var(--panel); overflow:hidden; display:flex; flex-direction:column; }
+  #left { left:0; border-right:1px solid var(--line); }
+  #right { right:0; width:330px; border-left:1px solid var(--line); }
+  aside.is-hidden { display:none; }
+  main { position:absolute; top:58px; left:0; right:0; bottom:0; }
+  .edge { position:absolute; top:12px; z-index:7; width:34px; height:34px; padding:0; }
   #toggleLeft { left:12px; } #toggleRight { right:12px; }
-  header { grid-column:1 / -1; display:flex; align-items:center; gap:14px; padding:0 14px; border-bottom:1px solid var(--line); background:linear-gradient(90deg,#0b1730,#0c1222 62%,#102033); }
   .logo { display:flex; align-items:center; gap:10px; font-weight:750; }
   .mark { width:30px; height:30px; border-radius:9px; background:radial-gradient(circle at 30% 30%,#fff,#2ee6c7 42%,#245bff); }
   .logo small { display:block; font-weight:500; color:var(--muted); font-size:11px; }
@@ -26,13 +27,10 @@
   button { cursor:pointer; } button:hover, button.on { border-color:var(--accent); }
   button.primary { background:linear-gradient(180deg,#1c8f86,#146e78); border-color:transparent; font-weight:650; }
   button.danger { background:#3a1822; border-color:#7a3040; color:#ffd0d6; }
-  aside { background:var(--panel); overflow:hidden; display:flex; flex-direction:column; min-height:0; }
-  #left { border-right:1px solid var(--line); }
-  #right { border-left:1px solid var(--line); }
   .pane { padding:12px; overflow:auto; }
   .pane.grow { flex:1; }
   .pane.foot { border-top:1px solid var(--line); background:#0c1730; }
-  main { position:relative; min-width:0; }
+  main { position:absolute; top:58px; left:0; right:0; bottom:0; min-width:0; }
   #view { position:absolute; inset:0; }
   #view canvas { display:block; width:100%; height:100%; }
   h3 { margin:12px 0 8px; font-size:11px; letter-spacing:.9px; text-transform:uppercase; color:var(--accent); }
@@ -184,7 +182,7 @@
   <label class="check"><input id="optWalls" type="checkbox" checked> Show walls</label>
   <label class="field">Readout <select id="tempUnit"><option value="K">Kelvin (K)</option><option value="C">Celsius (°C)</option><option value="F">Fahrenheit (°F)</option></select><b id="unitTag">K</b></label>
   <label class="field">Limit <input id="maxMols" type="number" min="1" max="80" value="80"><b>mol.</b></label>
-  <p class="help"><kbd>Space</kbd> pause · <kbd>N</kbd> beaker · <kbd>C</kbd> builder · <kbd>F</kbd> focus · <kbd>V</kbd> this beaker · <kbd>D</kbd> pour · <kbd>A</kbd> add · <kbd>←</kbd><kbd>→</kbd> switch · <kbd>+</kbd><kbd>-</kbd> temperature · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> unit · <kbd>Esc</kbd> close · camera mode: <kbd>WASD</kbd> <kbd>Shift</kbd> up <kbd>C</kbd> down</p>
+  <p class="help"><kbd>Space</kbd> pause · <kbd>N</kbd> beaker · <kbd>C</kbd> builder · <kbd>F</kbd> focus · <kbd>V</kbd> this beaker · <kbd>D</kbd> pour · <kbd>A</kbd> add · <kbd>←</kbd><kbd>→</kbd> switch · <kbd>+</kbd><kbd>-</kbd> temperature · <kbd>B</kbd> sidebars · <kbd>Esc</kbd> close · camera mode: <kbd>WASD</kbd> <kbd>Shift</kbd> up <kbd>C</kbd> down</p>
   <button id="closeSettings">Close</button>
 </div></div>
 <div id="about" class="modal-back"><div class="sheet">
@@ -498,11 +496,19 @@ document.getElementById("gfxLow").onclick=()=>{ state.gfx="low"; applyGfx(); sav
 document.getElementById("gfxMid").onclick=()=>{ state.gfx="mid"; applyGfx(); savePrefs(); };
 document.getElementById("gfxHigh").onclick=()=>{ state.gfx="high"; applyGfx(); savePrefs(); };
 document.getElementById("btnFly").onclick=()=>{ state.fly=!state.fly; document.getElementById("btnFly").classList.toggle("on",state.fly); toast(state.fly?"Camera mode: WASD, Shift up, C down.":"Orbit camera restored."); };
-document.getElementById("toggleLeft").onclick=()=>{ document.getElementById("app").classList.toggle("left-closed"); document.getElementById("toggleLeft").textContent=document.getElementById("app").classList.contains("left-closed")?"⟩":"⟨"; requestAnimationFrame(()=>window.dispatchEvent(new Event("resize"))); };
-document.getElementById("toggleRight").onclick=()=>{ document.getElementById("app").classList.toggle("right-closed"); document.getElementById("toggleRight").textContent=document.getElementById("app").classList.contains("right-closed")?"⟨":"⟩"; requestAnimationFrame(()=>window.dispatchEvent(new Event("resize"))); };
+document.getElementById("toggleLeft").onclick=()=>setSidebars(document.getElementById("left").classList.contains("is-hidden")?"both":"right");
+document.getElementById("toggleRight").onclick=()=>setSidebars(document.getElementById("right").classList.contains("is-hidden")?"both":"left");
+function setSidebars(mode){
+  state.sidebars=mode;
+  document.getElementById("left").classList.toggle("is-hidden",mode==="right"||mode==="none");
+  document.getElementById("right").classList.toggle("is-hidden",mode==="left"||mode==="none");
+  const names={both:"both sidebars",left:"left only",right:"right only",none:"no sidebars"};
+  toast(names[mode]||mode);
+}
+function cycleSidebars(){ setSidebars({both:"left",left:"right",right:"none",none:"both"}[state.sidebars||"both"]); }
 window.addEventListener("keydown",e=>{ flyKeys[e.code]=true; if(state.fly&&["KeyW","KeyA","KeyS","KeyD","KeyC"].includes(e.code)) e.preventDefault(); });
 window.addEventListener("keyup",e=>{ flyKeys[e.code]=false; });
-document.addEventListener("keydown",e=>{ const typing=["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName); if(e.key==="Escape"){ document.querySelectorAll(".modal-back").forEach(m=>m.classList.remove("show")); return; } if(typing) return; if(e.key===" "){ e.preventDefault(); document.getElementById("btnPlay").click(); } else if(e.key==="n"||e.key==="N") createContainer({name:"Beaker "+(state.containers.length+1)}); else if((e.key==="c"||e.key==="C")&&!state.fly) openCreator(); else if(e.key==="v"||e.key==="V"){ state.viewMode=!state.viewMode; applyView(); } else if(e.key==="p"||e.key==="P"){ state.precise=!state.precise; document.getElementById("optPrecise").checked=state.precise; document.body.classList.toggle("precise",state.precise); savePrefs(); } else if(e.key==="d"||e.key==="D") pour(); else if(e.key==="a"||e.key==="A") document.getElementById("btnAdd").click(); else if(e.key==="f"||e.key==="F") focusContainer(current()); else if(e.key==="ArrowRight"||e.key==="ArrowLeft"){ const i=state.containers.findIndex(c=>c.id===state.selected); const next=state.containers[(i+(e.key==="ArrowRight"?1:state.containers.length-1))%state.containers.length]; if(next){ selectContainer(next.id); focusContainer(next); } } else if(e.key==="+"||e.key==="=") nudgeTemp(25); else if(e.key==="-"||e.key==="_") nudgeTemp(-25); else if(e.key==="1") setUnit("K"); else if(e.key==="2") setUnit("C"); else if(e.key==="3") setUnit("F"); });
+document.addEventListener("keydown",e=>{ const typing=["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName); if(e.key==="Escape"){ document.querySelectorAll(".modal-back").forEach(m=>m.classList.remove("show")); return; } if(typing) return; if(e.key===" "){ e.preventDefault(); document.getElementById("btnPlay").click(); } else if(e.key==="n"||e.key==="N") createContainer({name:"Beaker "+(state.containers.length+1)}); else if((e.key==="c"||e.key==="C")&&!state.fly) openCreator(); else if(e.key==="v"||e.key==="V"){ state.viewMode=!state.viewMode; applyView(); } else if(e.key==="p"||e.key==="P"){ state.precise=!state.precise; document.getElementById("optPrecise").checked=state.precise; document.body.classList.toggle("precise",state.precise); savePrefs(); } else if(e.key==="d"||e.key==="D") pour(); else if(e.key==="a"||e.key==="A") document.getElementById("btnAdd").click(); else if(e.key==="f"||e.key==="F") focusContainer(current()); else if(e.key==="ArrowRight"||e.key==="ArrowLeft"){ const i=state.containers.findIndex(c=>c.id===state.selected); const next=state.containers[(i+(e.key==="ArrowRight"?1:state.containers.length-1))%state.containers.length]; if(next){ selectContainer(next.id); focusContainer(next); } } else if(e.key==="+"||e.key==="=") nudgeTemp(25); else if(e.key==="-"||e.key==="_") nudgeTemp(-25); else if(e.key==="b"||e.key==="B") cycleSidebars(); else if(e.key==="1") setUnit("K"); else if(e.key==="2") setUnit("C"); else if(e.key==="3") setUnit("F"); });
 function saneKelvin(k){ if(!isFinite(k)||Math.abs(k)<1e-6){ toast("Temperature cannot be 0 K."); return 298; } return k; }
 function flyCamera(dt){
   if(!state.fly) return;
