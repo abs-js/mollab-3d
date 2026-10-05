@@ -181,7 +181,7 @@
 <div id="about" class="modal-back"><div class="sheet">
   <h2>Informações do simulador</h2>
   <p class="help">MOLLAB mostra moléculas em esferas CPK e ligações a duas cores. A geometria usa distâncias em ångströms. O movimento é clássico e simplificado: a temperatura aumenta a agitação, as paredes fazem ricochete e algumas reações acontecem sozinhas.</p>
-  <p class="help">As reações olham para a composição, não para o nome. Precisam das moléculas certas, da temperatura e da pressão. Ácido + hidróxido de Na ou K dão sal e água. Sais de Na ou K dissolvem-se se houver água. NH3 + H2O formam NH4+ e OH− abaixo de 100 °C e com pressão suficiente. 2 H2 + O2 só acima de 650 K. Acima de 1400 K e com pressão baixa, moléculas partem-se.</p>
+  <p class="help">As reações olham para a composição, não para o nome. Precisam das moléculas certas, da temperatura e da pressão. Ácido + hidróxido de Na ou K dão sal e água. Sais de Na ou K dissolvem-se se houver água. NH3 + H2O formam NH4+ e OH− abaixo de 100 °C e com pressão suficiente. 2 H2 + O2, ou qualquer combustível de C, H, O, N e S com O2, só acima de 650 K e 0,15 atm. O programa equilibra a equação pela composição. Acima de 1400 K e com pressão baixa, moléculas partem-se.</p>
   <p class="help">A pressão é do modelo de béquer: P = nRT/V, com 1 unidade = 1 cm e cada molécula visível = 0,002 mol. O modo alto é um desenho do núcleo e de eletrões, não um cálculo quântico.</p>
   <button id="closeAbout">Fechar</button>
 </div></div>
@@ -342,10 +342,7 @@ function reactions(){
       if(c.temperature<273||c.temperature>1073||P.atm<0.10) note("salt","sal e água presentes, mas falta 273–1073 K e pelo menos 0,10 atm.");
       else if(Math.random()<.55){ const p=salt.group.position.clone(); const metal=salt.atoms.find(a=>a.el==="Na"||a.el==="K").el; const halo=salt.atoms.find(a=>a.el!==metal).el; removeMol(salt); spawn(ionDef(metal,"+"),c,p.clone().add(new THREE.Vector3(-.6,.2,0))); spawn(ionDef(halo,"−"),c,p.clone().add(new THREE.Vector3(.6,-.2,0))); log(c.name+": "+metal+halo+" dissolveu-se em iões."); changed=true; }
     }
-    if((counts.H2||[]).length>=2&&(counts.O2||[]).length>=1){
-      if(c.temperature<650||P.atm<0.15) note("burn","H2 e O2 presentes, mas falta mais de 650 K e pelo menos 0,15 atm.");
-      else { const hs=counts.H2.slice(0,2), os=counts.O2.slice(0,1), p=hs[0].group.position.clone(); hs.concat(os).forEach(removeMol); spawn(state.library.H2O,c,p); spawn(state.library.H2O,c,p.clone().add(new THREE.Vector3(1.2,.4,-.4))); log(c.name+": combustão 2 H2 + O2 → 2 H2O."); changed=true; }
-    }
+    if(tryCombustion(c,P,note)) changed=true;
     if((counts.NH3||[]).length&&(counts.water||[]).length){
       if(c.temperature<250||c.temperature>373||P.atm<0.50) note("nh3","NH3 e água presentes, mas falta 250–373 K e pelo menos 0,50 atm.");
       else if(Math.random()<.4){ const a=counts.NH3[0], w=counts.water[0], p=a.group.position.clone(); removeMol(a); removeMol(w); spawn(nh4Def(),c,p); spawn(ionDef("OH","−"),c,p.clone().add(new THREE.Vector3(.7,.2,0))); log(c.name+": NH3 + H2O → NH4+ e OH−."); changed=true; }
@@ -356,6 +353,51 @@ function reactions(){
     }
   });
   if(changed) renderContainerList();
+}
+function atomCounts(m){ const counts={}; m.atoms.forEach(a=>counts[a.el]=(counts[a.el]||0)+1); return counts; }
+function tryCombustion(c,P,note){
+  const ox=c.molecules.filter(m=>molKind(m)==="O2");
+  const fuels=c.molecules.filter(isFuel);
+  if(!ox.length||!fuels.length) return false;
+  const plan=fuels.map(fuel=>({fuel,bal:balanceCombustion(atomCounts(fuel))})).find(x=>x.bal&&fuels.filter(f=>sameComp(f,x.fuel)).length>=x.bal.fuel&&ox.length>=x.bal.o2);
+  if(!plan) return false;
+  if(c.temperature<650||P.atm<0.15){ note("burn","combustível e O2 presentes, mas falta mais de 650 K e pelo menos 0,15 atm."); return false; }
+  const group=fuels.filter(f=>sameComp(f,plan.fuel)).slice(0,plan.bal.fuel);
+  const usedOx=ox.slice(0,plan.bal.o2);
+  const pos=group[0].group.position.clone();
+  const products=plan.bal.co2+plan.bal.h2o+plan.bal.n2+plan.bal.so2;
+  if(c.molecules.length-group.length-usedOx.length+products>state.maxMols) return false;
+  group.concat(usedOx).forEach(removeMol);
+  let i=0;
+  const put=(def)=>{ spawn(def,c,pos.clone().add(new THREE.Vector3((i%4)*0.9,Math.floor(i/4)*0.6,0))); i++; };
+  for(let n=0;n<plan.bal.co2;n++) put(state.library.CO2);
+  for(let n=0;n<plan.bal.h2o;n++) put(state.library.H2O);
+  for(let n=0;n<plan.bal.n2;n++) put(state.library.N2);
+  for(let n=0;n<plan.bal.so2;n++) put({formula:"SO2",name:"Dióxido de enxofre",atoms:[{el:"S",x:0,y:0,z:0},{el:"O",x:-1.43,y:0,z:0},{el:"O",x:1.43,y:0,z:0}],bonds:[[0,1],[0,2]]});
+  log(c.name+": combustão "+plan.bal.fuel+" "+plan.fuel.formula+" + "+plan.bal.o2+" O2 → "+plan.bal.co2+" CO2 + "+plan.bal.h2o+" H2O"+(plan.bal.n2?" + "+plan.bal.n2+" N2":"")+(plan.bal.so2?" + "+plan.bal.so2+" SO2":"")+".");
+  return true;
+}
+function isFuel(m){
+  if(m.flags&&m.flags.ion) return false;
+  const k=molKind(m);
+  if(k==="O2"||k==="water"||k==="acid"||k==="base"||k==="salt"||k==="ion") return false;
+  const counts=atomCounts(m);
+  const els=Object.keys(counts);
+  if(els.some(el=>!["C","H","O","N","S"].includes(el))) return false;
+  if(!(counts.C||counts.H||counts.S)) return false;
+  if(counts.C===1&&counts.O===2&&els.length===2) return false;
+  if(counts.N===2&&els.length===1) return false;
+  return !!balanceCombustion(counts);
+}
+function sameComp(a,b){ const ca=atomCounts(a), cb=atomCounts(b); const keys=[...new Set(Object.keys(ca).concat(Object.keys(cb)))]; return keys.every(k=>(ca[k]||0)===(cb[k]||0)); }
+function balanceCombustion(counts){
+  const c=counts.C||0, h=counts.H||0, o=counts.O||0, n=counts.N||0, s=counts.S||0;
+  const num=4*c+h+4*s-2*o;
+  if(num<=0) return null;
+  let k=1;
+  while(k<=4&&((k*num)%4!==0||(k*h)%2!==0||(k*n)%2!==0)) k++;
+  if(k>4) return null;
+  return {fuel:k,o2:(k*num)/4,co2:k*c,h2o:(k*h)/2,n2:(k*n)/2,so2:k*s};
 }
 function molKind(m){
   const counts={}; m.atoms.forEach(a=>counts[a.el]=(counts[a.el]||0)+1);
