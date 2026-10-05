@@ -482,6 +482,7 @@ document.getElementById("btnFormula").onclick=()=>{ const def=buildFromFormula(d
 function clearContainer(){ const c=current(); if(!c) return; [...c.molecules].forEach(removeMol); log(c.name+" emptied."); renderContainerList(); }
 document.getElementById("btnOnly").onclick=()=>removeFiltered("only");
 document.getElementById("btnExcept").onclick=()=>removeFiltered("except");
+document.getElementById("btnClear").onclick=clearContainer; document.getElementById("btnDelete").onclick=deleteContainer; document.getElementById("btnPour").onclick=pour;
 document.getElementById("btnPlay").onclick=()=>{ state.playing=!state.playing; document.getElementById("btnPlay").textContent=state.playing?"Pause":"Resume"; };
 document.getElementById("cName").oninput=e=>{ const c=current(); if(!c) return; c.name=e.target.value||"Beaker"; document.getElementById("cTitle").textContent=c.name; renderContainerList(); refreshPour(); };
 ["temp","sx","sy","sz"].forEach(id=>{ const apply=()=>readSizeTemp(); document.getElementById(id).oninput=apply; document.getElementById(id+"N").oninput=apply; });
