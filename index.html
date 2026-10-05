@@ -190,7 +190,7 @@
 <div id="about" class="modal-back"><div class="sheet">
   <h2>About do simulador</h2>
   <p class="help">MOLLAB shows molecules as CPK spheres and two-color bonds. Geometry uses angstrom distances. Motion is a simplified classical model: temperature increases agitation, walls bounce particles, and some reactions run on their own.</p>
-  <p class="help">Reactions use composition, not the name. They need the right molecules, temperature, and pressure. An H–halogen acid plus Na or K hydroxide gives salt and water. Na or K salts dissolve if water is present. NH3 + H2O make NH4+ and OH− below 100 °C with enough pressure. Fuels of C, H, O, N, and S burn with O2 only above 650 K and 0.15 atm. The equation is balanced from composition. Above 1400 K and at low pressure, molecules break apart.</p>
+  <p class="help">Reactions use composition, not the name. They need the right molecules, temperature, and pressure. An H–halogen acid plus Na or K hydroxide gives salt and water. Na or K salts dissolve if water is present. NH3 + H2O make NH4+ and OH− below 100 °C with enough pressure. Fuels of C, H, O, N, and S burn with O2 only above 650 K and 0.15 atm. The equation is balanced from composition. Isolated atoms can fuse when temperature, pressure, valence, and electronegativity fit. Two H atoms make H2 above about 180 K and 0.04 atm.</p>
   <p class="help">Pressure is a beaker model: P = nRT/V, with 1 unit = 1 cm and each visible molecule = 0.002 mol. High graphics is a nucleus and electron drawing, not a quantum calculation.</p>
   <button id="closeAbout">Close</button>
 </div></div>
@@ -386,6 +386,7 @@ function reactions(){
       if(c.temperature<250||c.temperature>373||P.atm<0.50) note("nh3","NH3 and water present, but need 250–373 K and at least 0.50 atm.");
       else if(Math.random()<.4){ const a=counts.NH3[0], w=counts.water[0], p=a.group.position.clone(); removeMol(a); removeMol(w); spawn(nh4Def(),c,p); spawn(ionDef("OH","−"),c,p.clone().add(new THREE.Vector3(.7,.2,0))); log(c.name+": NH3 + H2O → NH4+ e OH−."); changed=true; }
     }
+    if(tryFuse(c,P,note)) changed=true;
     if(c.temperature>1400){
       if(P.atm>=2.5) note("dec","decomposition temperature, but pressure is too high (keep it below 2.50 atm).");
       else { const victim=c.molecules.find(m=>m.atoms.length>1&&!(m.flags&&m.flags.ion)&&Math.random()<.25); if(victim){ const p=victim.group.position.clone(), atoms=victim.atoms.map(a=>a.el), formula=victim.formula; removeMol(victim); atoms.forEach((el,i)=>spawn({formula:el,name:ELEMENTS[el].name+" isolated",atoms:[{el:el,x:0,y:0,z:0}],bonds:[],flags:{fragment:true,isolated:true}},c,p.clone().add(new THREE.Vector3((i-1)*.7,.3,0)))); log(c.name+": decomposition of "+formula+"."); changed=true; } }
@@ -393,7 +394,37 @@ function reactions(){
   });
   if(changed) renderContainerList();
 }
-function atomCounts(m){ const counts={}; m.atoms.forEach(a=>counts[a.el]=(counts[a.el]||0)+1); return counts; }
+function tryFuse(c,P,note){
+  const free=c.molecules.filter(m=>m.atoms.length===1&&!(m.flags&&m.flags.ion)&&m.flags&&(m.flags.isolated||m.flags.atom||m.flags.fragment));
+  if(free.length<2) return false;
+  if(c.temperature>1400) return false;
+  const EN={H:2.2,C:2.55,N:3.04,O:3.44,F:3.98,Na:0.93,Mg:1.31,P:2.19,S:2.58,Cl:3.16,K:0.82,Ca:1,Fe:1.83,Br:2.96,I:2.66};
+  const IE={H:13.6,C:11.3,N:14.5,O:13.6,F:17.4,Na:5.1,Mg:7.6,P:10.5,S:10.4,Cl:13,K:4.3,Ca:6.1,Fe:7.9,Br:11.8,I:10.5};
+  let best=null;
+  for(let i=0;i<free.length;i++) for(let j=i+1;j<free.length;j++){
+    const a=free[i].atoms[0].el, b=free[j].atoms[0].el;
+    const dEN=Math.abs((EN[a]||2)-(EN[b]||2));
+    const ionic=dEN>=1.7&&(IE[a]||10)!==(IE[b]||10);
+    const diatomic=["H","N","O","F","Cl","Br","I"].includes(a)&&a===b;
+    const score=(diatomic?3:0)+(ionic?2.4:0)+dEN+(a==="H"||b==="H"?0.8:0);
+    if(!best||score>best.score) best={i:free[i],j:free[j],a,b,dEN,ionic,score};
+  }
+  if(!best) return false;
+  const barrier=best.a==="H"&&best.b==="H"?180:best.ionic?240:320+best.dEN*40;
+  const minP=best.a==="H"&&best.b==="H"?0.04:0.08;
+  if(c.temperature<barrier||P.atm<minP){ note("fuse","isolated atoms present, but fusion needs about "+Math.round(barrier)+" K and "+minP.toFixed(2)+" atm."); return false; }
+  if(Math.random()>Math.min(0.8,0.25+P.atm*0.3)) return false;
+  const atoms=[best.a,best.b];
+  const built=assembleMolecule(atoms);
+  const formula=best.a===best.b?best.a+"2":[best.a,best.b].sort().join("");
+  const known=state.library[formula]||state.library[best.a+best.b]||state.library[best.b+best.a];
+  const pos=best.i.group.position.clone().add(best.j.group.position).multiplyScalar(.5);
+  removeMol(best.i); removeMol(best.j);
+  const flags=best.ionic?{salt:true,fused:true}:{fused:true};
+  spawn(known&&known.atoms?known:{formula:known?known.formula:formula,name:(best.ionic?"Ionic ":"")+"fused "+formula,atoms:built.atoms,bonds:built.bonds,flags:flags},c,pos);
+  log(c.name+": fusion "+best.a+" + "+best.b+" → "+(known?known.formula:formula)+(best.ionic?" (ionic, ΔEN "+best.dEN.toFixed(2)+")":" (covalent, ΔEN "+best.dEN.toFixed(2)+")")+".");
+  return true;
+}
 function tryCombustion(c,P,note){
   const ox=c.molecules.filter(m=>molKind(m)==="O2");
   const fuels=c.molecules.filter(isFuel);
