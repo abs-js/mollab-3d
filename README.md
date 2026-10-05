@@ -1,10 +1,12 @@
 # MOLLAB 3D
 
-Simulador molecular no browser, num único ficheiro HTML.
+A molecular simulator in the browser, in a single HTML file.
 
-Abre `index.html` no navegador. A primeira carga precisa de internet para o Three.js.
+Open `index.html` in a browser. The first load needs internet for Three.js.
 
-- Recipientes 3D, átomos em esferas e ligações a duas cores
-- Temperatura em K, °C ou °F, pressão do modelo e modo preciso
-- Derramar um béquer noutro e ver só o béquer atual
-- Criador de moléculas e fórmulas como NaH ou NH3
+- 3D beakers, atoms as spheres, and two-color bonds
+- Any temperature except 0 K, in K, °C, or °F, plus model pressure and precise mode
+- Pour one beaker into another, or view only the current beaker
+- Molecule builder and formulas such as NaH, NH3, or H2O2
+- Combustion is balanced from atom counts, not a fixed case list
+- Collapsible sidebars and a camera mode: WASD, Shift up, C down

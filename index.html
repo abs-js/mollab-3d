@@ -1,15 +1,20 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MOLLAB — Simulador Molecular 3D</title>
+<title>MOLLAB — 3D Molecular Simulator</title>
 <style>
   :root { --bg:#07101c; --panel:rgba(10,18,34,.94); --line:rgba(130,190,255,.18); --text:#e7f0ff; --muted:#8ea3c4; --accent:#2ee6c7; --danger:#ff6b7a; }
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:"Segoe UI",system-ui,sans-serif; }
   body { overflow:hidden; }
-  #app { display:grid; grid-template-columns:300px 1fr 330px; grid-template-rows:58px 1fr; height:100%; }
+  #app.left-closed { grid-template-columns: 0 1fr 330px; }
+  #app.right-closed { grid-template-columns: 300px 1fr 0; }
+  #app.left-closed.right-closed { grid-template-columns: 0 1fr 0; }
+  #app.left-closed #left, #app.right-closed #right { overflow:hidden; visibility:hidden; }
+  .edge { position:absolute; top:12px; z-index:5; width:34px; height:34px; padding:0; }
+  #toggleLeft { left:12px; } #toggleRight { right:12px; }
   header { grid-column:1 / -1; display:flex; align-items:center; gap:14px; padding:0 14px; border-bottom:1px solid var(--line); background:linear-gradient(90deg,#0b1730,#0c1222 62%,#102033); }
   .logo { display:flex; align-items:center; gap:10px; font-weight:750; }
   .mark { width:30px; height:30px; border-radius:9px; background:radial-gradient(circle at 30% 30%,#fff,#2ee6c7 42%,#245bff); }
@@ -66,12 +71,13 @@
 <body>
 <div id="app">
   <header>
-    <div class="logo"><div class="mark"></div><div>MOLLAB 3D<small>Simulador molecular</small></div></div>
-    <div id="simInfo">Geometria em ångströms · agitação térmica · pressão P = nRT/V<br>1 unidade = 1 cm · cada molécula visível = 0,002 mol</div>
+    <div class="logo"><div class="mark"></div><div>MOLLAB 3D<small>Molecular simulator</small></div></div>
+    <div id="simInfo">Angstrom geometry · thermal motion · pressure P = nRT/V<br>1 unit = 1 cm · each visible molecule = 0.002 mol</div>
     <div class="head-actions">
-      <button id="btnSettings">Configurações</button>
-      <button id="btnInfo">Informações</button>
-      <button id="btnPlay" class="primary">Pausa</button>
+      <button id="btnFly">Camera</button>
+      <button id="btnSettings">Settings</button>
+      <button id="btnInfo">About</button>
+      <button id="btnPlay" class="primary">Pause</button>
     </div>
   </header>
   <aside id="left">
@@ -79,134 +85,136 @@
       <h3 style="margin-top:0">Adicionar</h3>
       <div class="row">
         <input id="qty" type="number" min="1" max="24" value="4">
-        <button id="btnAdd" class="primary">Colocar</button>
+        <button id="btnAdd" class="primary">Add</button>
       </div>
       <div class="row" style="margin-top:8px">
         <input id="formulaIn" type="text" placeholder="NaH, NH3, CaCl2" value="NaH">
-        <button id="btnFormula">Gerar</button>
+        <button id="btnFormula">Build</button>
       </div>
       <div class="tabs" style="padding:10px 0 8px">
-        <button id="tabMol" class="on">Moléculas</button>
-        <button id="tabAtom">Átomos</button>
-        <button id="tabMine">Minhas</button>
+        <button id="tabMol" class="on">Molecules</button>
+        <button id="tabAtom">Atoms</button>
+        <button id="tabMine">Mine</button>
       </div>
       <div id="lib" class="chips"></div>
     </div>
     <div class="pane foot">
-      <h2 id="cTitle">Béquer</h2>
+      <h2 id="cTitle">Beaker</h2>
       <div class="help" id="cMeta"></div>
       <div class="stats" style="margin-top:8px">
-        <div class="stat"><span>Temperatura</span><b id="hudT">—</b></div>
-        <div class="stat"><span>Pressão</span><b id="hudP">—</b></div>
+        <div class="stat"><span>Temperature</span><b id="hudT">—</b></div>
+        <div class="stat"><span>Pressure</span><b id="hudP">—</b></div>
         <div class="stat"><span>Volume</span><b id="hudV">—</b></div>
-        <div class="stat"><span>Quantidade</span><b id="nRead">—</b></div>
-        <div class="stat"><span>Moléculas</span><b id="hudMol">0</b></div>
-        <div class="stat"><span>Átomos</span><b id="hudAtom">0</b></div>
-        <div class="stat"><span>Estado</span><b id="hudState">—</b></div>
-        <div class="stat"><span>Velocidade</span><b id="hudSpeed">x1</b></div>
+        <div class="stat"><span>Amount</span><b id="nRead">—</b></div>
+        <div class="stat"><span>Molecules</span><b id="hudMol">0</b></div>
+        <div class="stat"><span>Atoms</span><b id="hudAtom">0</b></div>
+        <div class="stat"><span>State</span><b id="hudState">—</b></div>
+        <div class="stat"><span>Speed</span><b id="hudSpeed">x1</b></div>
       </div>
     </div>
   </aside>
   <main>
     <div id="view"></div>
+    <button id="toggleLeft" class="edge" title="Hide left sidebar">⟨</button>
+    <button id="toggleRight" class="edge" title="Hide right sidebar">⟩</button>
     <div id="inspector" class="inspector"><h4 id="insFormula">—</h4><div class="sub" id="insName">—</div><div class="kv" id="insBody"></div></div>
-    <div class="hint">Clica num béquer para centrar · arrasta para orbitar · roda para zoom · F centra o selecionado</div>
+    <div class="hint">Click a beaker to focus · drag to orbit · wheel to zoom · F focuses · WASD in camera mode</div>
   </main>
   <aside id="right">
     <div class="tabs">
-      <button id="tabAdjust" class="on">Ajustes</button>
-      <button id="tabTools">Ferramentas</button>
+      <button id="tabAdjust" class="on">Adjust</button>
+      <button id="tabTools">Tools</button>
     </div>
     <div class="pane grow" id="paneAdjust">
-      <label class="field">Nome <input id="cName" type="text" value="Béquer 1"><b></b></label>
-      <label class="field">Temperatura
-        <input class="range-only" id="temp" type="range" min="40" max="1800" value="298">
-        <input class="num-only" id="tempN" type="number" min="-200" max="1800" step="0.1" value="298">
+      <label class="field">Name <input id="cName" type="text" value="Beaker 1"><b></b></label>
+      <label class="field">Temperature
+        <input class="range-only" id="temp" type="range" min="1" max="20000" value="298">
+        <input class="num-only" id="tempN" type="number" step="0.1" value="298">
         <b id="tVal">298 K</b>
       </label>
-      <label class="field">Largura
+      <label class="field">Width
         <input class="range-only" id="sx" type="range" min="6" max="28" value="12" step="0.1">
         <input class="num-only" id="sxN" type="number" min="6" max="28" step="0.1" value="12"><b id="sxVal">12</b>
       </label>
-      <label class="field">Altura
+      <label class="field">Height
         <input class="range-only" id="sy" type="range" min="5" max="22" value="10" step="0.1">
         <input class="num-only" id="syN" type="number" min="5" max="22" step="0.1" value="10"><b id="syVal">10</b>
       </label>
-      <label class="field">Profundidade
+      <label class="field">Depth
         <input class="range-only" id="sz" type="range" min="6" max="28" value="12" step="0.1">
         <input class="num-only" id="szN" type="number" min="6" max="28" step="0.1" value="12"><b id="szVal">12</b>
       </label>
-      <div class="row"><select id="pourTarget"></select><button id="btnPour">Derramar</button></div>
-      <div class="row" style="margin-top:8px"><button id="btnClear">Esvaziar</button><button id="btnDelete" class="danger">Apagar</button></div>
-      <h3>Béqueres</h3>
+      <div class="row"><select id="pourTarget"></select><button id="btnPour">Pour</button></div>
+      <div class="row" style="margin-top:8px"><button id="btnClear">Empty</button><button id="btnDelete" class="danger">Delete</button></div>
+      <h3>Beakers</h3>
       <div id="cList" class="clist"></div>
-      <h3>Registo</h3>
+      <h3>Log</h3>
       <div id="log" class="log card"></div>
     </div>
     <div class="pane grow" id="paneTools" style="display:none">
-      <h3 style="margin-top:0">Esquentar</h3>
+      <h3 style="margin-top:0">Heat</h3>
       <div class="card">
-        <label class="field">Limite <input id="heatTarget" type="number" value="800"><b id="heatUnit">K</b></label>
-        <label class="field">Ritmo <input id="heatRate" type="number" min="1" max="400" value="40"><b>K/s</b></label>
-        <button id="btnHeat" class="primary">Esquentar</button>
-        <p class="help">Sobe a temperatura do béquer atual até ao limite, ao longo do tempo.</p>
+        <label class="field">Limit <input id="heatTarget" type="number" value="800"><b id="heatUnit">K</b></label>
+        <label class="field">Rate <input id="heatRate" type="number" min="1" max="400" value="40"><b>K/s</b></label>
+        <button id="btnHeat" class="primary">Heat</button>
+        <p class="help">Raises the current beaker temperature to the limit over time.</p>
       </div>
-      <h3>Acelerar</h3>
+      <h3>Speed</h3>
       <div id="speeds" class="chips"></div>
-      <h3>Modo gráfico</h3>
+      <h3>Graphics</h3>
       <div class="chips">
-        <button id="gfxLow" class="chip">Baixo</button>
-        <button id="gfxMid" class="chip on">Médio</button>
-        <button id="gfxHigh" class="chip">Alto</button>
+        <button id="gfxLow" class="chip">Low</button>
+        <button id="gfxMid" class="chip on">Medium</button>
+        <button id="gfxHigh" class="chip">High</button>
       </div>
-      <p class="help">Baixo é simples. Médio é o normal. Alto mostra núcleo e eletrões em órbita visual.</p>
-      <h3>Outras</h3>
-      <div class="row"><button id="btnCreator" class="primary">Criador MolView</button><button id="btnView">Ver só este</button></div>
-      <button id="btnContainer" style="margin-top:8px;width:100%">+ Recipiente</button>
+      <p class="help">Low is simple. Medium is normal. High shows a nucleus and visual electron orbits.</p>
+      <h3>More</h3>
+      <div class="row"><button id="btnCreator" class="primary">MolView builder</button><button id="btnView">This beaker only</button></div>
+      <button id="btnContainer" style="margin-top:8px;width:100%">+ Beaker</button>
     </div>
   </aside>
 </div>
 <div id="settings" class="modal-back"><div class="sheet">
-  <h2>Configurações</h2>
-  <label class="check"><input id="optAtoms" type="checkbox" checked> Mostrar nomes dos átomos</label>
-  <label class="check"><input id="optMols" type="checkbox" checked> Mostrar nomes das moléculas</label>
-  <label class="check"><input id="optPrecise" type="checkbox"> Modo preciso</label>
-  <label class="check"><input id="optGrid" type="checkbox" checked> Mostrar grelha</label>
-  <label class="check"><input id="optWalls" type="checkbox" checked> Mostrar paredes</label>
-  <label class="field">Leitura <select id="tempUnit"><option value="K">Kelvin (K)</option><option value="C">Celsius (°C)</option><option value="F">Fahrenheit (°F)</option></select><b id="unitTag">K</b></label>
-  <label class="field">Limite <input id="maxMols" type="number" min="1" max="80" value="80"><b>mol.</b></label>
-  <p class="help"><kbd>Espaço</kbd> pausa · <kbd>N</kbd> béquer · <kbd>C</kbd> criador · <kbd>F</kbd> centrar · <kbd>V</kbd> ver só este · <kbd>D</kbd> derramar · <kbd>A</kbd> colocar · <kbd>←</kbd><kbd>→</kbd> mudar · <kbd>+</kbd><kbd>-</kbd> temperatura · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> unidade · <kbd>Esc</kbd> fechar</p>
-  <button id="closeSettings">Fechar</button>
+  <h2>Settings</h2>
+  <label class="check"><input id="optAtoms" type="checkbox" checked> Show atom labels</label>
+  <label class="check"><input id="optMols" type="checkbox" checked> Show molecule labels</label>
+  <label class="check"><input id="optPrecise" type="checkbox"> Precise mode</label>
+  <label class="check"><input id="optGrid" type="checkbox" checked> Show grid</label>
+  <label class="check"><input id="optWalls" type="checkbox" checked> Show walls</label>
+  <label class="field">Readout <select id="tempUnit"><option value="K">Kelvin (K)</option><option value="C">Celsius (°C)</option><option value="F">Fahrenheit (°F)</option></select><b id="unitTag">K</b></label>
+  <label class="field">Limit <input id="maxMols" type="number" min="1" max="80" value="80"><b>mol.</b></label>
+  <p class="help"><kbd>Space</kbd> pause · <kbd>N</kbd> beaker · <kbd>C</kbd> builder · <kbd>F</kbd> focus · <kbd>V</kbd> this beaker · <kbd>D</kbd> pour · <kbd>A</kbd> add · <kbd>←</kbd><kbd>→</kbd> switch · <kbd>+</kbd><kbd>-</kbd> temperature · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> unit · <kbd>Esc</kbd> close · camera mode: <kbd>WASD</kbd> <kbd>Shift</kbd> up <kbd>C</kbd> down</p>
+  <button id="closeSettings">Close</button>
 </div></div>
 <div id="about" class="modal-back"><div class="sheet">
-  <h2>Informações do simulador</h2>
-  <p class="help">MOLLAB mostra moléculas em esferas CPK e ligações a duas cores. A geometria usa distâncias em ångströms. O movimento é clássico e simplificado: a temperatura aumenta a agitação, as paredes fazem ricochete e algumas reações acontecem sozinhas.</p>
-  <p class="help">As reações olham para a composição, não para o nome. Precisam das moléculas certas, da temperatura e da pressão. Ácido + hidróxido de Na ou K dão sal e água. Sais de Na ou K dissolvem-se se houver água. NH3 + H2O formam NH4+ e OH− abaixo de 100 °C e com pressão suficiente. 2 H2 + O2, ou qualquer combustível de C, H, O, N e S com O2, só acima de 650 K e 0,15 atm. O programa equilibra a equação pela composição. Acima de 1400 K e com pressão baixa, moléculas partem-se.</p>
-  <p class="help">A pressão é do modelo de béquer: P = nRT/V, com 1 unidade = 1 cm e cada molécula visível = 0,002 mol. O modo alto é um desenho do núcleo e de eletrões, não um cálculo quântico.</p>
-  <button id="closeAbout">Fechar</button>
+  <h2>About do simulador</h2>
+  <p class="help">MOLLAB shows molecules as CPK spheres and two-color bonds. Geometry uses angstrom distances. Motion is a simplified classical model: temperature increases agitation, walls bounce particles, and some reactions run on their own.</p>
+  <p class="help">Reactions use composition, not the name. They need the right molecules, temperature, and pressure. An H–halogen acid plus Na or K hydroxide gives salt and water. Na or K salts dissolve if water is present. NH3 + H2O make NH4+ and OH− below 100 °C with enough pressure. Fuels of C, H, O, N, and S burn with O2 only above 650 K and 0.15 atm. The equation is balanced from composition. Above 1400 K and at low pressure, molecules break apart.</p>
+  <p class="help">Pressure is a beaker model: P = nRT/V, with 1 unit = 1 cm and each visible molecule = 0.002 mol. High graphics is a nucleus and electron drawing, not a quantum calculation.</p>
+  <button id="closeAbout">Close</button>
 </div></div>
 <div id="creator" class="modal-back"><div class="modal">
   <div>
-    <h3 style="margin-top:0">Elemento</h3>
+    <h3 style="margin-top:0">Element</h3>
     <div id="elPalette" class="chips"></div>
-    <h3>Modo</h3>
+    <h3>Mode</h3>
     <div class="chips">
-      <button id="modePlace" class="chip on">Colocar</button>
-      <button id="modeBond" class="chip">Ligar</button>
-      <button id="modeMove" class="chip">Mover</button>
+      <button id="modePlace" class="chip on">Add</button>
+      <button id="modeBond" class="chip">Bond</button>
+      <button id="modeMove" class="chip">Move</button>
     </div>
-    <p class="help" id="creatorHint">Clica no plano para pôr o átomo. No modo ligar, clica em dois átomos.</p>
-    <div class="row" style="margin-top:8px"><button id="delAtom" class="danger">Apagar átomo</button><button id="clearBuild">Limpar</button></div>
+    <p class="help" id="creatorHint">Click the plane to place an atom. In bond mode, click two atoms.</p>
+    <div class="row" style="margin-top:8px"><button id="delAtom" class="danger">Delete atom</button><button id="clearBuild">Clear</button></div>
   </div>
   <div id="creatorView"></div>
   <div>
-    <h3 style="margin-top:0">Molécula</h3>
-    <label class="field">Nome <input id="molName" type="text" value="Hidreto de sódio"><b></b></label>
+    <h3 style="margin-top:0">Molecule</h3>
+    <label class="field">Name <input id="molName" type="text" value="Sodium hydride"><b></b></label>
     <label class="field">Fórmula <input id="molFormula" type="text" value="NaH"><b></b></label>
     <div class="chips" id="starters"></div>
-    <h3>Ligações</h3>
+    <h3>Bonds</h3>
     <div id="bondList" class="help"></div>
-    <div class="row" style="margin-top:12px"><button id="saveMol" class="primary">Guardar e usar</button><button id="closeCreator">Fechar</button></div>
+    <div class="row" style="margin-top:12px"><button id="saveMol" class="primary">Save and use</button><button id="closeCreator">Close</button></div>
   </div>
 </div></div>
 <div id="toast"></div>
@@ -214,29 +222,29 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
 const ELEMENTS = {
-  H:{name:"Hidrogénio",color:0xF2F2F2,r:0.28,mass:1.008,z:1}, C:{name:"Carbono",color:0xC8C8C8,r:0.42,mass:12.011,z:6},
-  N:{name:"Azoto",color:0x8F8FFF,r:0.40,mass:14.007,z:7}, O:{name:"Oxigénio",color:0xF00000,r:0.38,mass:15.999,z:8},
-  F:{name:"Flúor",color:0xDAA520,r:0.36,mass:18.998,z:9}, Na:{name:"Sódio",color:0x3B5BFF,r:0.55,mass:22.990,z:11},
-  Mg:{name:"Magnésio",color:0x2A802A,r:0.52,mass:24.305,z:12}, P:{name:"Fósforo",color:0xFFA500,r:0.46,mass:30.974,z:15},
-  S:{name:"Enxofre",color:0xFFC832,r:0.48,mass:32.06,z:16}, Cl:{name:"Cloro",color:0x1DFF3A,r:0.50,mass:35.45,z:17},
-  K:{name:"Potássio",color:0x8F41E0,r:0.62,mass:39.098,z:19}, Ca:{name:"Cálcio",color:0x808090,r:0.58,mass:40.078,z:20},
-  Fe:{name:"Ferro",color:0xE07020,r:0.52,mass:55.845,z:26}, Br:{name:"Bromo",color:0xA52A2A,r:0.54,mass:79.904,z:35},
-  I:{name:"Iodo",color:0x9400D3,r:0.58,mass:126.904,z:53}
+  H:{name:"Hydrogen",color:0xF2F2F2,r:0.28,mass:1.008,z:1}, C:{name:"Carbon",color:0xC8C8C8,r:0.42,mass:12.011,z:6},
+  N:{name:"Nitrogen",color:0x8F8FFF,r:0.40,mass:14.007,z:7}, O:{name:"Oxygen",color:0xF00000,r:0.38,mass:15.999,z:8},
+  F:{name:"Fluorine",color:0xDAA520,r:0.36,mass:18.998,z:9}, Na:{name:"Sodium",color:0x3B5BFF,r:0.55,mass:22.990,z:11},
+  Mg:{name:"Magnesium",color:0x2A802A,r:0.52,mass:24.305,z:12}, P:{name:"Phosphorus",color:0xFFA500,r:0.46,mass:30.974,z:15},
+  S:{name:"Sulfur",color:0xFFC832,r:0.48,mass:32.06,z:16}, Cl:{name:"Chlorine",color:0x1DFF3A,r:0.50,mass:35.45,z:17},
+  K:{name:"Potassium",color:0x8F41E0,r:0.62,mass:39.098,z:19}, Ca:{name:"Calcium",color:0x808090,r:0.58,mass:40.078,z:20},
+  Fe:{name:"Iron",color:0xE07020,r:0.52,mass:55.845,z:26}, Br:{name:"Bromine",color:0xA52A2A,r:0.54,mass:79.904,z:35},
+  I:{name:"Iodine",color:0x9400D3,r:0.58,mass:126.904,z:53}
 };
 function mol(formula,name,atoms,bonds,flags){ return {formula,name,atoms,bonds,flags:flags||{}}; }
 const PRESETS = [
-  mol("H2O","Água",[{el:"O",x:0,y:0,z:0},{el:"H",x:0.757,y:0.586,z:0},{el:"H",x:-0.757,y:0.586,z:0}],[[0,1],[0,2]],{solvent:true}),
-  mol("NaCl","Cloreto de sódio",[{el:"Na",x:-1.2,y:0,z:0},{el:"Cl",x:1.2,y:0,z:0}],[[0,1]],{salt:true}),
-  mol("HCl","Ácido clorídrico",[{el:"H",x:-0.64,y:0,z:0},{el:"Cl",x:0.64,y:0,z:0}],[[0,1]],{acid:true}),
-  mol("NaOH","Hidróxido de sódio",[{el:"Na",x:-1.4,y:0,z:0},{el:"O",x:0.1,y:0,z:0},{el:"H",x:0.85,y:0.55,z:0}],[[0,1],[1,2]],{base:true}),
-  mol("CO2","Dióxido de carbono",[{el:"C",x:0,y:0,z:0},{el:"O",x:-1.16,y:0,z:0},{el:"O",x:1.16,y:0,z:0}],[[0,1],[0,2]]),
-  mol("O2","Oxigénio",[{el:"O",x:-0.6,y:0,z:0},{el:"O",x:0.6,y:0,z:0}],[[0,1]],{oxygen:true}),
-  mol("N2","Azoto",[{el:"N",x:-0.55,y:0,z:0},{el:"N",x:0.55,y:0,z:0}],[[0,1]]),
-  mol("H2","Hidrogénio",[{el:"H",x:-0.37,y:0,z:0},{el:"H",x:0.37,y:0,z:0}],[[0,1]],{hydrogen:true}),
-  mol("CH4","Metano",[{el:"C",x:0,y:0,z:0},{el:"H",x:0.63,y:0.63,z:0.63},{el:"H",x:0.63,y:-0.63,z:-0.63},{el:"H",x:-0.63,y:0.63,z:-0.63},{el:"H",x:-0.63,y:-0.63,z:0.63}],[[0,1],[0,2],[0,3],[0,4]]),
-  mol("NH3","Amoníaco",[{el:"N",x:0,y:0.15,z:0},{el:"H",x:0.94,y:-0.28,z:0},{el:"H",x:-0.47,y:-0.28,z:0.81},{el:"H",x:-0.47,y:-0.28,z:-0.81}],[[0,1],[0,2],[0,3]]),
-  mol("NaH","Hidreto de sódio",[{el:"Na",x:-0.95,y:0,z:0},{el:"H",x:0.95,y:0,z:0}],[[0,1]]),
-  mol("C6H6","Benzeno",[],[])
+  mol("H2O","Water",[{el:"O",x:0,y:0,z:0},{el:"H",x:0.757,y:0.586,z:0},{el:"H",x:-0.757,y:0.586,z:0}],[[0,1],[0,2]],{solvent:true}),
+  mol("NaCl","Sodium chloride",[{el:"Na",x:-1.2,y:0,z:0},{el:"Cl",x:1.2,y:0,z:0}],[[0,1]],{salt:true}),
+  mol("HCl","Hydrochloric acid",[{el:"H",x:-0.64,y:0,z:0},{el:"Cl",x:0.64,y:0,z:0}],[[0,1]],{acid:true}),
+  mol("NaOH","Sodium hydroxide",[{el:"Na",x:-1.4,y:0,z:0},{el:"O",x:0.1,y:0,z:0},{el:"H",x:0.85,y:0.55,z:0}],[[0,1],[1,2]],{base:true}),
+  mol("CO2","Carbon dioxide",[{el:"C",x:0,y:0,z:0},{el:"O",x:-1.16,y:0,z:0},{el:"O",x:1.16,y:0,z:0}],[[0,1],[0,2]]),
+  mol("O2","Oxygen",[{el:"O",x:-0.6,y:0,z:0},{el:"O",x:0.6,y:0,z:0}],[[0,1]],{oxygen:true}),
+  mol("N2","Nitrogen",[{el:"N",x:-0.55,y:0,z:0},{el:"N",x:0.55,y:0,z:0}],[[0,1]]),
+  mol("H2","Hydrogen",[{el:"H",x:-0.37,y:0,z:0},{el:"H",x:0.37,y:0,z:0}],[[0,1]],{hydrogen:true}),
+  mol("CH4","Methane",[{el:"C",x:0,y:0,z:0},{el:"H",x:0.63,y:0.63,z:0.63},{el:"H",x:0.63,y:-0.63,z:-0.63},{el:"H",x:-0.63,y:0.63,z:-0.63},{el:"H",x:-0.63,y:-0.63,z:0.63}],[[0,1],[0,2],[0,3],[0,4]]),
+  mol("NH3","Ammonia",[{el:"N",x:0,y:0.15,z:0},{el:"H",x:0.94,y:-0.28,z:0},{el:"H",x:-0.47,y:-0.28,z:0.81},{el:"H",x:-0.47,y:-0.28,z:-0.81}],[[0,1],[0,2],[0,3]]),
+  mol("NaH","Sodium hydride",[{el:"Na",x:-0.95,y:0,z:0},{el:"H",x:0.95,y:0,z:0}],[[0,1]]),
+  mol("C6H6","Benzene",[],[])
 ];
 (function(){ const b=PRESETS.find(p=>p.formula==="C6H6"); for(let i=0;i<6;i++){ const a=i*Math.PI/3; b.atoms.push({el:"C",x:1.4*Math.cos(a),y:1.4*Math.sin(a),z:0}); } for(let i=0;i<6;i++){ const a=i*Math.PI/3; b.atoms.push({el:"H",x:2.48*Math.cos(a),y:2.48*Math.sin(a),z:0}); b.bonds.push([i,(i+1)%6],[i,i+6]); } })();
 const labelCache={};
@@ -245,10 +253,34 @@ function roundRect(g,x,y,w,h,r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x
 function labelTex(text,wide){ const key=text+(wide?"w":"s"); if(labelCache[key]) return labelCache[key]; const c=document.createElement("canvas"); c.width=wide?512:256; c.height=128; const g=c.getContext("2d"); g.fillStyle="rgba(4,12,24,.84)"; roundRect(g,12,28,c.width-24,72,24); g.fill(); g.strokeStyle=wide?"rgba(46,230,199,.85)":"rgba(180,230,255,.7)"; g.lineWidth=4; roundRect(g,12,28,c.width-24,72,24); g.stroke(); g.fillStyle="#f4fbff"; g.font="bold "+(wide?46:54)+"px Segoe UI,sans-serif"; g.textAlign="center"; g.textBaseline="middle"; g.fillText(text,c.width/2,66); const tex=new THREE.CanvasTexture(c); labelCache[key]=tex; return tex; }
 function parseFormula(input){ const s=String(input||"").replace(/\s+/g,""); if(!s) return null; const re=/([A-Z][a-z]?)(\d*)/g; const parts=[]; let m,idx=0; while((m=re.exec(s))){ if(m.index!==idx) return null; idx=re.lastIndex; if(!ELEMENTS[m[1]]) return null; parts.push({el:m[1],n:m[2]?Number(m[2]):1}); } if(idx!==s.length||!parts.length) return null; if(parts.reduce((s0,p)=>s0+p.n,0)>24) return null; return parts; }
 function ligandPos(i,n,r){ if(n===1) return {x:r,y:0,z:0}; if(n===2) return i?{x:r,y:0,z:0}:{x:-r,y:0,z:0}; if(n===3){ const a=i*120*Math.PI/180; return {x:r*Math.cos(a),y:-0.32,z:r*Math.sin(a)}; } if(n===4){ const t=[[1,1,1],[1,-1,-1],[-1,1,-1],[-1,-1,1]][i]; const l=Math.hypot(t[0],t[1],t[2]); return {x:r*t[0]/l,y:r*t[1]/l,z:r*t[2]/l}; } const a=i/n*Math.PI*2; return {x:r*Math.cos(a),y:i%2?0.35:-0.35,z:r*Math.sin(a)}; }
-function buildFromFormula(formula){ const known=state.library[formula]; if(known&&known.atoms&&known.atoms.length) return JSON.parse(JSON.stringify(known)); const parts=parseFormula(formula); if(!parts) return null; const atoms=[]; parts.forEach(p=>{ for(let i=0;i<p.n;i++) atoms.push(p.el); }); if(atoms.length===1) return mol(formula,ELEMENTS[atoms[0]].name+" isolado",[{el:atoms[0],x:0,y:0,z:0}],[],{isolated:true,custom:true}); if(atoms.length===2){ const d=0.9+ELEMENTS[atoms[0]].r+ELEMENTS[atoms[1]].r; return mol(formula,formula,[{el:atoms[0],x:-d/2,y:0,z:0},{el:atoms[1],x:d/2,y:0,z:0}],[[0,1]],{custom:true}); } let centerAt=atoms.findIndex(el=>el!=="H"); if(centerAt<0) centerAt=0; const center=atoms[centerAt]; const ligands=atoms.filter((_,i)=>i!==centerAt); const placed=[{el:center,x:0,y:0,z:0}], bonds=[]; ligands.forEach((el,i)=>{ const p=ligandPos(i,ligands.length,0.85+ELEMENTS[center].r+ELEMENTS[el].r*0.45); placed.push({el:el,x:p.x,y:p.y,z:p.z}); bonds.push([0,i+1]); }); return mol(formula,formula,placed,bonds,{custom:true}); }
+function buildFromFormula(formula){
+  const known=state.library[formula];
+  if(known&&known.atoms&&known.atoms.length&&!(known.flags&&known.flags.custom)) return JSON.parse(JSON.stringify(known));
+  const parts=parseFormula(formula); if(!parts) return null;
+  const atoms=[]; parts.forEach(p=>{ for(let i=0;i<p.n;i++) atoms.push(p.el); });
+  if(atoms.length===1) return mol(formula,ELEMENTS[atoms[0]].name+" isolated",[{el:atoms[0],x:0,y:0,z:0}],[],{isolated:true,custom:true});
+  const built=assembleMolecule(atoms);
+  return mol(formula,formula,built.atoms,built.bonds,{custom:true});
+}
+const VALENCE={H:1,F:1,Cl:1,Br:1,I:1,Na:1,K:1,Li:1,O:2,S:2,N:3,P:3,C:4,Mg:2,Ca:2};
+function assembleMolecule(atoms){
+  const n=atoms.length, val=atoms.map(el=>VALENCE[el]||1), used=atoms.map(()=>0), bonds=[];
+  function link(i,j){ if(i===j||used[i]>=val[i]||used[j]>=val[j]) return false; if(bonds.some(b=>(b[0]===i&&b[1]===j)||(b[0]===j&&b[1]===i))) return false; bonds.push([i,j]); used[i]++; used[j]++; return true; }
+  const heavy=atoms.map((el,i)=>i).filter(i=>atoms[i]!=="H");
+  const chain=heavy.filter(i=>val[i]>=2), ends=heavy.filter(i=>val[i]<2);
+  for(let i=0;i<chain.length-1;i++) link(chain[i],chain[i+1]);
+  ends.forEach(t=>{ const host=chain.find(i=>used[i]<val[i]); if(host!=null) link(host,t); else { const other=heavy.find(i=>i!==t&&used[i]<val[i]); if(other!=null) link(other,t); } });
+  atoms.forEach((el,i)=>{ if(el!=="H") return; const host=heavy.find(h=>used[h]<val[h]); if(host!=null) link(host,i); });
+  for(let guard=0;guard<n*n;guard++){ let progressed=false; for(let i=0;i<n;i++){ if(used[i]>=val[i]) continue; for(let j=i+1;j<n;j++){ if(used[j]>=val[j]) continue; if(link(i,j)){ progressed=true; break; } } if(progressed) break; } if(!progressed) break; }
+  const pos=atoms.map(()=>null); const start=chain[0]!=null?chain[0]:0; pos[start]={x:0,y:0,z:0};
+  const q=[start]; const seen=new Set([start]);
+  while(q.length){ const i=q.shift(); const nbr=bonds.filter(b=>b[0]===i||b[1]===i).map(b=>b[0]===i?b[1]:b[0]); let k=0; nbr.forEach(j=>{ if(seen.has(j)) return; seen.add(j); const ang=k*2.2+0.4, bend=atoms[i]==="O"?1.82:1.91; const dist=1.0+(VALENCE[atoms[i]]?0:0.2); pos[j]={x:pos[i].x+Math.cos(ang)*dist,y:pos[i].y+Math.sin(k*1.1)*0.35+ (k%2?0.45:-0.2),z:pos[i].z+Math.sin(ang)*Math.sin(bend)*dist}; k++; q.push(j); }); }
+  atoms.forEach((el,i)=>{ if(!pos[i]) pos[i]={x:i*1.2,y:0,z:0}; });
+  return {atoms:atoms.map((el,i)=>({el:el,x:pos[i].x,y:pos[i].y,z:pos[i].z})),bonds:bonds};
+}
 const state={ containers:[], selected:null, library:{}, playing:true, selectedFormula:"H2O", tab:"mol", precise:false, packet:0.002, showAtoms:true, showMols:true, tempUnit:"K", viewMode:false, maxMols:80, showGrid:true, showWalls:true, speed:1, gfx:"mid", heating:false, heatTarget:800, heatRate:40 };
 PRESETS.forEach(p=>state.library[p.formula]=p);
-Object.keys(ELEMENTS).forEach(el=>state.library["atom:"+el]=mol(el,ELEMENTS[el].name+" isolado",[{el:el,x:0,y:0,z:0}],[],{isolated:true,atom:true}));
+Object.keys(ELEMENTS).forEach(el=>state.library["atom:"+el]=mol(el,ELEMENTS[el].name+" isolated",[{el:el,x:0,y:0,z:0}],[],{isolated:true,atom:true}));
 try { JSON.parse(localStorage.getItem("mollab-custom")||"[]").forEach(p=>{ p.flags=Object.assign({custom:true},p.flags); state.library[p.formula]=p; }); const prefs=JSON.parse(localStorage.getItem("mollab-prefs")||"{}"); Object.assign(state, prefs); } catch(e) {}
 const view=document.getElementById("view");
 const renderer=new THREE.WebGLRenderer({antialias:true});
@@ -267,7 +299,7 @@ function log(msg){ const box=document.getElementById("log"); const d=document.cr
 function seg(){ return state.gfx==="low"?8:state.gfx==="high"?24:16; }
 function makeWalls(size,id){ const g=new THREE.Group(); const geo=new THREE.BoxGeometry(size.x,size.y,size.z); const glass=new THREE.Mesh(geo,new THREE.MeshPhongMaterial({color:0x88ccee,transparent:true,opacity:.07,side:THREE.DoubleSide,depthWrite:false})); const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:0x7ee7ff})); const floor=new THREE.Mesh(new THREE.BoxGeometry(size.x,.08,size.z),new THREE.MeshPhongMaterial({color:0x123049,transparent:true,opacity:.45})); floor.position.y=-size.y/2; g.add(glass,edges,floor); g.userData.edges=edges; g.userData.glass=glass; g.traverse(o=>o.userData.containerId=id); return g; }
 function tempColor(t){ return new THREE.Color().setHSL(.55-Math.min(1,Math.max(0,(t-200)/1200))*.55,.8,.55); }
-function createContainer(opts){ const c={id:uid++,name:opts.name||("Recipiente "+uid),size:{x:opts.x||12,y:opts.y||10,z:opts.z||12},temperature:opts.temperature||298,molecules:[],group:new THREE.Group()}; c.walls=makeWalls(c.size,c.id); c.group.add(c.walls); scene.add(c.group); state.containers.push(c); selectContainer(c.id); layoutContainers(); log("Recipiente criado: "+c.name); return c; }
+function createContainer(opts){ const c={id:uid++,name:opts.name||("Beaker "+uid),size:{x:opts.x||12,y:opts.y||10,z:opts.z||12},temperature:opts.temperature||298,molecules:[],group:new THREE.Group()}; c.walls=makeWalls(c.size,c.id); c.group.add(c.walls); scene.add(c.group); state.containers.push(c); selectContainer(c.id); layoutContainers(); log("Beaker created: "+c.name); return c; }
 function layoutContainers(){ state.containers.forEach((c,i)=>{ c.group.position.x=(i-(state.containers.length-1)/2)*(c.size.x+6); }); }
 function current(){ return state.containers.find(c=>c.id===state.selected)||null; }
 function selectContainer(id){ state.selected=id; const c=current(); if(!c) return; document.getElementById("cTitle").textContent=c.name; document.getElementById("cName").value=c.name; setControl("temp",c.temperature); setControl("sx",c.size.x); setControl("sy",c.size.y); setControl("sz",c.size.z); renderContainerList(); highlight(); refreshPour(); applyView(); }
@@ -300,12 +332,12 @@ function spawn(def,container,at){
 function updateBonds(m){ m.bonds.forEach(b=>{ placeHalf(b.ha,m.atoms[b.i].mesh.position,m.atoms[b.j].mesh.position,0); placeHalf(b.hb,m.atoms[b.i].mesh.position,m.atoms[b.j].mesh.position,1); }); }
 function placeHalf(mesh,a,b,side){ const dir=new THREE.Vector3().subVectors(b,a); const len=dir.length(); if(len<1e-4) return; const n=dir.clone().normalize(); const start=side===0?a:a.clone().addScaledVector(n,len*.5); const end=side===0?a.clone().addScaledVector(n,len*.5):b; mesh.position.copy(start).lerp(end,.5); mesh.quaternion.setFromUnitVectors(UP,n); mesh.scale.set(1,start.distanceTo(end),1); }
 function removeMol(m){ const c=state.containers.find(x=>x.id===m.containerId); if(!c) return; c.group.remove(m.group); m.group.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); c.molecules=c.molecules.filter(x=>x.id!==m.id); }
-function addSubstance(formula,n){ const c=current(); if(!c){ toast("Cria um recipiente primeiro."); return; } const def=state.library[formula]||buildFromFormula(formula); if(!def){ toast("Fórmula não reconhecida."); return; } if(!state.library[def.formula]) state.library[def.formula]=def; const count=Math.max(1,Math.min(24,n||1)); if(c.molecules.length+count>state.maxMols){ toast("Limite gráfico de "+state.maxMols+" moléculas."); return; } for(let i=0;i<count;i++) spawn(def,c); log(count+" × "+def.formula+" em "+c.name); state.selectedFormula=def.flags&&def.flags.atom?"atom:"+def.formula:def.formula; renderLib(); renderContainerList(); }
-function clearContainer(){ const c=current(); if(!c) return; [...c.molecules].forEach(removeMol); log(c.name+" esvaziado."); renderContainerList(); }
+function addSubstance(formula,n){ const c=current(); if(!c){ toast("Create a beaker first."); return; } const def=state.library[formula]||buildFromFormula(formula); if(!def){ toast("Formula not recognized."); return; } if(!state.library[def.formula]) state.library[def.formula]=def; const count=Math.max(1,Math.min(24,n||1)); if(c.molecules.length+count>state.maxMols){ toast("Graphics limit of "+state.maxMols+" molecules."); return; } for(let i=0;i<count;i++) spawn(def,c); log(count+" × "+def.formula+" in "+c.name); state.selectedFormula=def.flags&&def.flags.atom?"atom:"+def.formula:def.formula; renderLib(); renderContainerList(); }
+function clearContainer(){ const c=current(); if(!c) return; [...c.molecules].forEach(removeMol); log(c.name+" emptied."); renderContainerList(); }
 function deleteContainer(){ const c=current(); if(!c) return; [...c.molecules].forEach(removeMol); scene.remove(c.group); state.containers=state.containers.filter(x=>x.id!==c.id); state.selected=state.containers[0]?state.containers[0].id:null; layoutContainers(); renderContainerList(); if(state.selected) selectContainer(state.selected); else refreshPour(); }
 function step(dt){
   const scaled=dt*state.speed;
-  if(state.heating){ const c=current(); if(c){ const dir=Math.sign(state.heatTarget-c.temperature); c.temperature+=dir*state.heatRate*scaled; if(dir===0||dir*Math.sign(state.heatTarget-c.temperature)<0){ c.temperature=state.heatTarget; state.heating=false; document.getElementById("btnHeat").textContent="Esquentar"; log(c.name+" chegou a "+formatT(c.temperature)+"."); } setControl("temp",c.temperature); document.getElementById("tVal").textContent=formatT(c.temperature); } }
+  if(state.heating){ const c=current(); if(c){ const dir=Math.sign(state.heatTarget-c.temperature); c.temperature+=dir*state.heatRate*scaled; if(dir===0||dir*Math.sign(state.heatTarget-c.temperature)<0){ c.temperature=state.heatTarget; state.heating=false; document.getElementById("btnHeat").textContent="Heat"; log(c.name+" reached "+formatT(c.temperature)+"."); } setControl("temp",c.temperature); document.getElementById("tVal").textContent=formatT(c.temperature); } }
   if(!state.playing) return;
   state.containers.forEach(c=>{
     const speed=0.55*Math.sqrt(Math.max(20,c.temperature)/298);
@@ -334,22 +366,22 @@ function reactions(){
     const note=(id,msg)=>{ const now=performance.now(); if(missAt[c.id+id]&&now-missAt[c.id+id]<4000) return; missAt[c.id+id]=now; log(c.name+": "+msg); };
     const acid=counts.acid&&counts.acid[0], base=counts.base&&counts.base[0];
     if(acid&&base){
-      if(c.temperature<250||c.temperature>1400||P.atm<0.08) note("ab","ácido e base presentes, mas falta 250–1400 K e pelo menos 0,08 atm.");
-      else { const p=acid.group.position.clone().add(base.group.position).multiplyScalar(.5); const metal=base.atoms.find(a=>a.el==="Na"||a.el==="K").el; const halo=acid.atoms.find(a=>a.el!=="H").el; removeMol(acid); removeMol(base); spawn(saltDef(metal,halo),c,p.clone().add(new THREE.Vector3(-.4,0,0))); spawn(state.library.H2O,c,p.clone().add(new THREE.Vector3(.8,.3,0))); log(c.name+": neutralização → sal + H2O."); changed=true; }
+      if(c.temperature<250||c.temperature>1400||P.atm<0.08) note("ab","acid and base present, but need 250–1400 K and at least 0.08 atm.");
+      else { const p=acid.group.position.clone().add(base.group.position).multiplyScalar(.5); const metal=base.atoms.find(a=>a.el==="Na"||a.el==="K").el; const halo=acid.atoms.find(a=>a.el!=="H").el; removeMol(acid); removeMol(base); spawn(saltDef(metal,halo),c,p.clone().add(new THREE.Vector3(-.4,0,0))); spawn(state.library.H2O,c,p.clone().add(new THREE.Vector3(.8,.3,0))); log(c.name+": neutralization → salt + H2O."); changed=true; }
     }
     const salt=counts.salt&&counts.salt[0];
     if(salt&&counts.water&&counts.water.length){
-      if(c.temperature<273||c.temperature>1073||P.atm<0.10) note("salt","sal e água presentes, mas falta 273–1073 K e pelo menos 0,10 atm.");
-      else if(Math.random()<.55){ const p=salt.group.position.clone(); const metal=salt.atoms.find(a=>a.el==="Na"||a.el==="K").el; const halo=salt.atoms.find(a=>a.el!==metal).el; removeMol(salt); spawn(ionDef(metal,"+"),c,p.clone().add(new THREE.Vector3(-.6,.2,0))); spawn(ionDef(halo,"−"),c,p.clone().add(new THREE.Vector3(.6,-.2,0))); log(c.name+": "+metal+halo+" dissolveu-se em iões."); changed=true; }
+      if(c.temperature<273||c.temperature>1073||P.atm<0.10) note("salt","salt and water present, but need 273–1073 K and at least 0.10 atm.");
+      else if(Math.random()<.55){ const p=salt.group.position.clone(); const metal=salt.atoms.find(a=>a.el==="Na"||a.el==="K").el; const halo=salt.atoms.find(a=>a.el!==metal).el; removeMol(salt); spawn(ionDef(metal,"+"),c,p.clone().add(new THREE.Vector3(-.6,.2,0))); spawn(ionDef(halo,"−"),c,p.clone().add(new THREE.Vector3(.6,-.2,0))); log(c.name+": "+metal+halo+" dissolveu-se in iões."); changed=true; }
     }
     if(tryCombustion(c,P,note)) changed=true;
     if((counts.NH3||[]).length&&(counts.water||[]).length){
-      if(c.temperature<250||c.temperature>373||P.atm<0.50) note("nh3","NH3 e água presentes, mas falta 250–373 K e pelo menos 0,50 atm.");
+      if(c.temperature<250||c.temperature>373||P.atm<0.50) note("nh3","NH3 and water present, but need 250–373 K and at least 0.50 atm.");
       else if(Math.random()<.4){ const a=counts.NH3[0], w=counts.water[0], p=a.group.position.clone(); removeMol(a); removeMol(w); spawn(nh4Def(),c,p); spawn(ionDef("OH","−"),c,p.clone().add(new THREE.Vector3(.7,.2,0))); log(c.name+": NH3 + H2O → NH4+ e OH−."); changed=true; }
     }
     if(c.temperature>1400){
-      if(P.atm>=2.5) note("dec","temperatura de decomposição, mas a pressão está alta demais (abaixo de 2,50 atm).");
-      else { const victim=c.molecules.find(m=>m.atoms.length>1&&!(m.flags&&m.flags.ion)&&Math.random()<.25); if(victim){ const p=victim.group.position.clone(), atoms=victim.atoms.map(a=>a.el), formula=victim.formula; removeMol(victim); atoms.forEach((el,i)=>spawn({formula:el,name:ELEMENTS[el].name+" isolado",atoms:[{el:el,x:0,y:0,z:0}],bonds:[],flags:{fragment:true,isolated:true}},c,p.clone().add(new THREE.Vector3((i-1)*.7,.3,0)))); log(c.name+": decomposição de "+formula+"."); changed=true; } }
+      if(P.atm>=2.5) note("dec","decomposition temperature, but pressure is too high (keep it below 2.50 atm).");
+      else { const victim=c.molecules.find(m=>m.atoms.length>1&&!(m.flags&&m.flags.ion)&&Math.random()<.25); if(victim){ const p=victim.group.position.clone(), atoms=victim.atoms.map(a=>a.el), formula=victim.formula; removeMol(victim); atoms.forEach((el,i)=>spawn({formula:el,name:ELEMENTS[el].name+" isolated",atoms:[{el:el,x:0,y:0,z:0}],bonds:[],flags:{fragment:true,isolated:true}},c,p.clone().add(new THREE.Vector3((i-1)*.7,.3,0)))); log(c.name+": decomposition of "+formula+"."); changed=true; } }
     }
   });
   if(changed) renderContainerList();
@@ -361,7 +393,7 @@ function tryCombustion(c,P,note){
   if(!ox.length||!fuels.length) return false;
   const plan=fuels.map(fuel=>({fuel,bal:balanceCombustion(atomCounts(fuel))})).find(x=>x.bal&&fuels.filter(f=>sameComp(f,x.fuel)).length>=x.bal.fuel&&ox.length>=x.bal.o2);
   if(!plan) return false;
-  if(c.temperature<650||P.atm<0.15){ note("burn","combustível e O2 presentes, mas falta mais de 650 K e pelo menos 0,15 atm."); return false; }
+  if(c.temperature<650||P.atm<0.15){ note("burn","fuel and O2 present, but need above 650 K and at least 0.15 atm."); return false; }
   const group=fuels.filter(f=>sameComp(f,plan.fuel)).slice(0,plan.bal.fuel);
   const usedOx=ox.slice(0,plan.bal.o2);
   const pos=group[0].group.position.clone();
@@ -373,8 +405,8 @@ function tryCombustion(c,P,note){
   for(let n=0;n<plan.bal.co2;n++) put(state.library.CO2);
   for(let n=0;n<plan.bal.h2o;n++) put(state.library.H2O);
   for(let n=0;n<plan.bal.n2;n++) put(state.library.N2);
-  for(let n=0;n<plan.bal.so2;n++) put({formula:"SO2",name:"Dióxido de enxofre",atoms:[{el:"S",x:0,y:0,z:0},{el:"O",x:-1.43,y:0,z:0},{el:"O",x:1.43,y:0,z:0}],bonds:[[0,1],[0,2]]});
-  log(c.name+": combustão "+plan.bal.fuel+" "+plan.fuel.formula+" + "+plan.bal.o2+" O2 → "+plan.bal.co2+" CO2 + "+plan.bal.h2o+" H2O"+(plan.bal.n2?" + "+plan.bal.n2+" N2":"")+(plan.bal.so2?" + "+plan.bal.so2+" SO2":"")+".");
+  for(let n=0;n<plan.bal.so2;n++) put({formula:"SO2",name:"Sulfur dioxide",atoms:[{el:"S",x:0,y:0,z:0},{el:"O",x:-1.43,y:0,z:0},{el:"O",x:1.43,y:0,z:0}],bonds:[[0,1],[0,2]]});
+  log(c.name+": combustion "+plan.bal.fuel+" "+plan.fuel.formula+" + "+plan.bal.o2+" O2 → "+plan.bal.co2+" CO2 + "+plan.bal.h2o+" H2O"+(plan.bal.n2?" + "+plan.bal.n2+" N2":"")+(plan.bal.so2?" + "+plan.bal.so2+" SO2":"")+".");
   return true;
 }
 function isFuel(m){
@@ -412,37 +444,37 @@ function molKind(m){
   if(m.atoms.length===2&&els.length===2&&["Na","K"].some(e=>counts[e]===1)&&["F","Cl","Br","I"].some(e=>counts[e]===1)) return "salt";
   return "other";
 }
-function saltDef(metal,halo){ return {formula:metal+halo,name:"Sal "+metal+halo,atoms:[{el:metal,x:-1.1,y:0,z:0},{el:halo,x:1.1,y:0,z:0}],bonds:[[0,1]],flags:{salt:true}}; }
-function ionDef(el,charge){ if(el==="OH") return {formula:"OH−",name:"Ião hidróxido",atoms:[{el:"O",x:-.4,y:0,z:0},{el:"H",x:.5,y:.2,z:0}],bonds:[[0,1]],charge:"−",flags:{ion:true}}; return {formula:el+charge,name:"Ião "+el,atoms:[{el:el,x:0,y:0,z:0}],bonds:[],charge:charge,flags:{ion:true}}; }
-function nh4Def(){ return {formula:"NH4+",name:"Ião amónio",atoms:[{el:"N",x:0,y:0,z:0},{el:"H",x:0.6,y:0.6,z:0.6},{el:"H",x:0.6,y:-0.6,z:-0.6},{el:"H",x:-0.6,y:0.6,z:-0.6},{el:"H",x:-0.6,y:-0.6,z:0.6}],bonds:[[0,1],[0,2],[0,3],[0,4]],charge:"+",flags:{ion:true}}; }
+function saltDef(metal,halo){ return {formula:metal+halo,name:"Salt "+metal+halo,atoms:[{el:metal,x:-1.1,y:0,z:0},{el:halo,x:1.1,y:0,z:0}],bonds:[[0,1]],flags:{salt:true}}; }
+function ionDef(el,charge){ if(el==="OH") return {formula:"OH−",name:"Hydroxide ion",atoms:[{el:"O",x:-.4,y:0,z:0},{el:"H",x:.5,y:.2,z:0}],bonds:[[0,1]],charge:"−",flags:{ion:true}}; return {formula:el+charge,name:"Ion "+el,atoms:[{el:el,x:0,y:0,z:0}],bonds:[],charge:charge,flags:{ion:true}}; }
+function nh4Def(){ return {formula:"NH4+",name:"Ammonium ion",atoms:[{el:"N",x:0,y:0,z:0},{el:"H",x:0.6,y:0.6,z:0.6},{el:"H",x:0.6,y:-0.6,z:-0.6},{el:"H",x:-0.6,y:0.6,z:-0.6},{el:"H",x:-0.6,y:-0.6,z:0.6}],bonds:[[0,1],[0,2],[0,3],[0,4]],charge:"+",flags:{ion:true}}; }
 function pressureOf(c){ if(!c) return null; const Vcm3=c.size.x*c.size.y*c.size.z, V_L=Vcm3/1000, n=c.molecules.length*state.packet, atm=V_L>0?n*0.08205746*c.temperature/V_L:0; return {atm:atm,kPa:atm*101.325,Vcm3:Vcm3,V_L:V_L,n:n}; }
-function stateText(t){ if(t<220) return "frio"; if(t<420) return "moderado"; if(t<800) return "quente"; return "muito quente"; }
-function renderLib(){ const box=document.getElementById("lib"); box.innerHTML=""; let items=state.tab==="atom"?Object.values(state.library).filter(d=>d.flags&&d.flags.atom):state.tab==="mine"?Object.values(state.library).filter(d=>d.flags&&d.flags.custom):Object.values(state.library).filter(d=>!(d.flags&&(d.flags.atom||d.flags.custom||d.flags.ion))); if(!items.length) box.innerHTML="<span class='help'>Nada nesta lista.</span>"; items.forEach(def=>{ const key=def.flags&&def.flags.atom?"atom:"+def.formula:def.formula; const b=document.createElement("button"); b.className="chip"+(state.selectedFormula===key?" on":""); b.textContent=def.formula; b.title=def.name; b.onclick=()=>{ state.selectedFormula=key; renderLib(); }; box.appendChild(b); }); }
+function stateText(t){ if(t<220) return "cold"; if(t<420) return "moderate"; if(t<800) return "hot"; return "very hot"; }
+function renderLib(){ const box=document.getElementById("lib"); box.innerHTML=""; let items=state.tab==="atom"?Object.values(state.library).filter(d=>d.flags&&d.flags.atom):state.tab==="mine"?Object.values(state.library).filter(d=>d.flags&&d.flags.custom):Object.values(state.library).filter(d=>!(d.flags&&(d.flags.atom||d.flags.custom||d.flags.ion))); if(!items.length) box.innerHTML="<span class='help'>Nothing in this list.</span>"; items.forEach(def=>{ const key=def.flags&&def.flags.atom?"atom:"+def.formula:def.formula; const b=document.createElement("button"); b.className="chip"+(state.selectedFormula===key?" on":""); b.textContent=def.formula; b.title=def.name; b.onclick=()=>{ state.selectedFormula=key; renderLib(); }; box.appendChild(b); }); }
 function renderContainerList(){ const box=document.getElementById("cList"); box.innerHTML=""; state.containers.forEach(c=>{ const b=document.createElement("button"); b.className="citem"+(c.id===state.selected?" active":""); b.innerHTML="<span>"+c.name+"</span><span>"+c.molecules.length+" · "+formatT(c.temperature)+"</span>"; b.onclick=()=>{ selectContainer(c.id); focusContainer(c); }; box.appendChild(b); }); }
 function fromK(k){ if(state.tempUnit==="C") return k-273.15; if(state.tempUnit==="F") return (k-273.15)*9/5+32; return k; }
 function toK(v){ if(state.tempUnit==="C") return Number(v)+273.15; if(state.tempUnit==="F") return (Number(v)-32)*5/9+273.15; return Number(v); }
 function formatT(k){ const unit=state.tempUnit==="C"?"°C":state.tempUnit==="F"?"°F":"K"; const v=fromK(k); return (state.tempUnit==="K"?Math.round(v):v.toFixed(1))+" "+unit; }
 function setControl(id,value){ const range=document.getElementById(id), num=document.getElementById(id+"N"); if(id==="temp"){ if(range) range.value=value; if(num) num.value=fromK(value).toFixed(state.tempUnit==="K"?0:1); return; } if(range) range.value=value; if(num) num.value=value; }
-function readSizeTemp(){ const c=current(); if(!c) return; const prev={x:c.size.x,y:c.size.y,z:c.size.z}; const raw=Number(state.precise?document.getElementById("tempN").value:document.getElementById("temp").value); c.temperature=Math.max(40,Math.min(1800,state.precise?toK(raw):raw)); c.size.x=Number(state.precise?document.getElementById("sxN").value:document.getElementById("sx").value); c.size.y=Number(state.precise?document.getElementById("syN").value:document.getElementById("sy").value); c.size.z=Number(state.precise?document.getElementById("szN").value:document.getElementById("sz").value); setControl("temp",c.temperature); setControl("sx",c.size.x); setControl("sy",c.size.y); setControl("sz",c.size.z); document.getElementById("tVal").textContent=formatT(c.temperature); document.getElementById("sxVal").textContent=Number(c.size.x).toFixed(1); document.getElementById("syVal").textContent=Number(c.size.y).toFixed(1); document.getElementById("szVal").textContent=Number(c.size.z).toFixed(1); if(prev.x!==c.size.x||prev.y!==c.size.y||prev.z!==c.size.z){ rebuildWalls(c); layoutContainers(); } }
+function readSizeTemp(){ const c=current(); if(!c) return; const prev={x:c.size.x,y:c.size.y,z:c.size.z}; const raw=Number(state.precise?document.getElementById("tempN").value:document.getElementById("temp").value); c.temperature=saneKelvin(state.precise?toK(raw):raw); c.size.x=Number(state.precise?document.getElementById("sxN").value:document.getElementById("sx").value); c.size.y=Number(state.precise?document.getElementById("syN").value:document.getElementById("sy").value); c.size.z=Number(state.precise?document.getElementById("szN").value:document.getElementById("sz").value); setControl("temp",c.temperature); setControl("sx",c.size.x); setControl("sy",c.size.y); setControl("sz",c.size.z); document.getElementById("tVal").textContent=formatT(c.temperature); document.getElementById("sxVal").textContent=Number(c.size.x).toFixed(1); document.getElementById("syVal").textContent=Number(c.size.y).toFixed(1); document.getElementById("szVal").textContent=Number(c.size.z).toFixed(1); if(prev.x!==c.size.x||prev.y!==c.size.y||prev.z!==c.size.z){ rebuildWalls(c); layoutContainers(); } }
 function savePrefs(){ localStorage.setItem("mollab-prefs", JSON.stringify({precise:state.precise,showAtoms:state.showAtoms,showMols:state.showMols,showGrid:state.showGrid,showWalls:state.showWalls,tempUnit:state.tempUnit,maxMols:state.maxMols,gfx:state.gfx,speed:state.speed})); }
 function applyLabels(){ state.containers.forEach(c=>c.molecules.forEach(m=>{ if(m.title) m.title.visible=state.showMols&&state.gfx!=="low"; m.atoms.forEach(a=>a.mesh.children.forEach(ch=>{ if(ch.isSprite) ch.visible=state.showAtoms&&state.gfx!=="low"; })); })); }
 function applyGfx(){ state.containers.forEach(c=>c.molecules.forEach(m=>m.atoms.forEach(a=>{ const el=ELEMENTS[a.el]; a.mesh.geometry.dispose(); a.mesh.geometry=new THREE.SphereGeometry(el.r,seg(),Math.max(8,seg()-4)); if(a.nucleus) a.nucleus.visible=state.gfx==="high"; if(a.electrons) a.electrons.forEach(e=>e.visible=state.gfx==="high"); }))); applyLabels(); document.getElementById("gfxLow").classList.toggle("on",state.gfx==="low"); document.getElementById("gfxMid").classList.toggle("on",state.gfx==="mid"); document.getElementById("gfxHigh").classList.toggle("on",state.gfx==="high"); }
-function applyView(){ state.containers.forEach(c=>{ c.group.visible=!state.viewMode||c.id===state.selected; }); const btn=document.getElementById("btnView"); btn.classList.toggle("on",state.viewMode); btn.textContent=state.viewMode?"Ver todos":"Ver só este"; grid.visible=state.showGrid&&!state.viewMode; state.containers.forEach(c=>{ if(c.walls) c.walls.visible=state.showWalls; }); }
-function refreshPour(){ const sel=document.getElementById("pourTarget"); const cur=sel.value; sel.innerHTML=""; state.containers.filter(c=>c.id!==state.selected).forEach(c=>{ const o=document.createElement("option"); o.value=c.id; o.textContent="Para "+c.name; sel.appendChild(o); }); if(!sel.options.length){ const o=document.createElement("option"); o.value=""; o.textContent="Sem outro béquer"; sel.appendChild(o); } else if([...sel.options].some(o=>o.value===cur)) sel.value=cur; }
-function pour(){ const src=current(); const dst=state.containers.find(c=>String(c.id)===document.getElementById("pourTarget").value); if(!src||!dst){ toast("Cria outro béquer para derramar."); return; } if(!src.molecules.length){ toast("Este béquer está vazio."); return; } const start=performance.now(); (function tilt(now){ const k=Math.min(1,(now-start)/800); src.group.rotation.z=Math.sin(k*Math.PI)*.55; if(k<1) requestAnimationFrame(tilt); else src.group.rotation.z=0; })(start); let moved=0; src.molecules.slice().forEach(m=>{ if(dst.molecules.length>=state.maxMols) return; src.group.remove(m.group); src.molecules=src.molecules.filter(x=>x.id!==m.id); dst.group.add(m.group); m.containerId=dst.id; m.group.position.set((Math.random()-.5)*(dst.size.x-3),(Math.random()-.5)*(dst.size.y-3),(Math.random()-.5)*(dst.size.z-3)); dst.molecules.push(m); moved++; }); log("Derramado "+moved+" de "+src.name+" para "+dst.name+"."); renderContainerList(); }
+function applyView(){ state.containers.forEach(c=>{ c.group.visible=!state.viewMode||c.id===state.selected; }); const btn=document.getElementById("btnView"); btn.classList.toggle("on",state.viewMode); btn.textContent=state.viewMode?"Show all":"Ver só este"; grid.visible=state.showGrid&&!state.viewMode; state.containers.forEach(c=>{ if(c.walls) c.walls.visible=state.showWalls; }); }
+function refreshPour(){ const sel=document.getElementById("pourTarget"); const cur=sel.value; sel.innerHTML=""; state.containers.filter(c=>c.id!==state.selected).forEach(c=>{ const o=document.createElement("option"); o.value=c.id; o.textContent="Into "+c.name; sel.appendChild(o); }); if(!sel.options.length){ const o=document.createElement("option"); o.value=""; o.textContent="No other beaker"; sel.appendChild(o); } else if([...sel.options].some(o=>o.value===cur)) sel.value=cur; }
+function pour(){ const src=current(); const dst=state.containers.find(c=>String(c.id)===document.getElementById("pourTarget").value); if(!src||!dst){ toast("Cria outro béquer into derramar."); return; } if(!src.molecules.length){ toast("This beaker is empty."); return; } const start=performance.now(); (function tilt(now){ const k=Math.min(1,(now-start)/800); src.group.rotation.z=Math.sin(k*Math.PI)*.55; if(k<1) requestAnimationFrame(tilt); else src.group.rotation.z=0; })(start); let moved=0; src.molecules.slice().forEach(m=>{ if(dst.molecules.length>=state.maxMols) return; src.group.remove(m.group); src.molecules=src.molecules.filter(x=>x.id!==m.id); dst.group.add(m.group); m.containerId=dst.id; m.group.position.set((Math.random()-.5)*(dst.size.x-3),(Math.random()-.5)*(dst.size.y-3),(Math.random()-.5)*(dst.size.z-3)); dst.molecules.push(m); moved++; }); log("Poured "+moved+" from "+src.name+" into "+dst.name+"."); renderContainerList(); }
 function focusContainer(c){ if(!c) return; focusAnim={ t:0, cam:camera.position.clone(), target:controls.target.clone(), camTo:c.group.position.clone().add(new THREE.Vector3(11,8,14)), targetTo:c.group.position.clone() }; }
-function hud(){ const c=current(), p=pressureOf(c); document.getElementById("hudT").textContent=c?formatT(c.temperature):"—"; document.getElementById("hudP").textContent=p?p.kPa.toFixed(2)+" kPa":"—"; document.getElementById("hudV").textContent=p?p.Vcm3.toFixed(0)+" cm³":"—"; document.getElementById("nRead").textContent=p?p.n.toFixed(3)+" mol":"—"; document.getElementById("hudMol").textContent=c?String(c.molecules.length):"0"; document.getElementById("hudAtom").textContent=c?String(c.molecules.reduce((s,m)=>s+m.atoms.length,0)):"0"; document.getElementById("hudState").textContent=c?stateText(c.temperature):"—"; document.getElementById("hudSpeed").textContent="x"+state.speed; document.getElementById("cMeta").textContent=p?(p.atm.toFixed(3)+" atm · "+Math.round(c.temperature-273.15)+" °C internos"):""; document.getElementById("simInfo").innerHTML="Béquer: "+(c?c.name:"—")+" · "+(state.playing?"a correr":"em pausa")+" · "+state.gfx+" · x"+state.speed+"<br>1 u = 1 cm · molécula visível = 0,002 mol · P = nRT/V"; if(hoverMol) fillInspector(hoverMol); }
-function fillInspector(m){ const c=state.containers.find(x=>x.id===m.containerId); document.getElementById("inspector").classList.add("show"); document.getElementById("insFormula").textContent=m.formula; document.getElementById("insName").textContent=m.name; const mass=m.atoms.reduce((s,a)=>s+ELEMENTS[a.el].mass,0); const counts={}; m.atoms.forEach(a=>counts[a.el]=(counts[a.el]||0)+1); const rows=[["Tipo",m.flags.ion?"Ião":m.atoms.length===1?"Átomo isolado":"Molécula"],["Composição",Object.entries(counts).map(([el,n])=>n+"× "+el).join(", ")],["Ligações",String(m.bonds.length)],["Massa",mass.toFixed(3)+" g/mol"],["Carga",m.charge||"0"],["Velocidade",m.velocity.length().toFixed(2)+" u/s"],["Posição",m.group.position.x.toFixed(2)+", "+m.group.position.y.toFixed(2)+", "+m.group.position.z.toFixed(2)],["Temperatura",c?formatT(c.temperature):"—"]]; document.getElementById("insBody").innerHTML=rows.map(r=>"<span>"+r[0]+"</span><b>"+r[1]+"</b>").join(""); }
+function hud(){ const c=current(), p=pressureOf(c); document.getElementById("hudT").textContent=c?formatT(c.temperature):"—"; document.getElementById("hudP").textContent=p?p.kPa.toFixed(2)+" kPa":"—"; document.getElementById("hudV").textContent=p?p.Vcm3.toFixed(0)+" cm³":"—"; document.getElementById("nRead").textContent=p?p.n.toFixed(3)+" mol":"—"; document.getElementById("hudMol").textContent=c?String(c.molecules.length):"0"; document.getElementById("hudAtom").textContent=c?String(c.molecules.reduce((s,m)=>s+m.atoms.length,0)):"0"; document.getElementById("hudState").textContent=c?stateText(c.temperature):"—"; document.getElementById("hudSpeed").textContent="x"+state.speed; document.getElementById("cMeta").textContent=p?(p.atm.toFixed(3)+" atm · "+Math.round(c.temperature-273.15)+" °C internos"):""; document.getElementById("simInfo").innerHTML="Beaker: "+(c?c.name:"—")+" · "+(state.playing?"running":"paused")+" · "+state.gfx+" · x"+state.speed+"<br>1 u = 1 cm · visible molecule = 0.002 mol · P = nRT/V"; if(hoverMol) fillInspector(hoverMol); }
+function fillInspector(m){ const c=state.containers.find(x=>x.id===m.containerId); document.getElementById("inspector").classList.add("show"); document.getElementById("insFormula").textContent=m.formula; document.getElementById("insName").textContent=m.name; const mass=m.atoms.reduce((s,a)=>s+ELEMENTS[a.el].mass,0); const counts={}; m.atoms.forEach(a=>counts[a.el]=(counts[a.el]||0)+1); const rows=[["Tipo",m.flags.ion?"Ion":m.atoms.length===1?"Átomo isolated":"Molecule"],["Composition",Object.entries(counts).map(([el,n])=>n+"× "+el).join(", ")],["Bonds",String(m.bonds.length)],["Mass",mass.toFixed(3)+" g/mol"],["Charge",m.charge||"0"],["Speed",m.velocity.length().toFixed(2)+" u/s"],["Position",m.group.position.x.toFixed(2)+", "+m.group.position.y.toFixed(2)+", "+m.group.position.z.toFixed(2)],["Temperature",c?formatT(c.temperature):"—"]]; document.getElementById("insBody").innerHTML=rows.map(r=>"<span>"+r[0]+"</span><b>"+r[1]+"</b>").join(""); }
 function setPointer(e){ const rect=renderer.domElement.getBoundingClientRect(); pointer.x=((e.clientX-rect.left)/rect.width)*2-1; pointer.y=-((e.clientY-rect.top)/rect.height)*2+1; }
 renderer.domElement.addEventListener("pointerdown",e=>{ pointerDown={x:e.clientX,y:e.clientY}; });
 renderer.domElement.addEventListener("pointerup",e=>{ if(!pointerDown||Math.hypot(e.clientX-pointerDown.x,e.clientY-pointerDown.y)>6) return; setPointer(e); raycaster.setFromCamera(pointer,camera); const hits=[]; state.containers.forEach(c=>c.walls.traverse(o=>{ if(o.isMesh) hits.push(o); })); const hit=raycaster.intersectObjects(hits,false)[0]; if(hit&&hit.object.userData.containerId){ const c=state.containers.find(x=>x.id===hit.object.userData.containerId); if(c){ selectContainer(c.id); focusContainer(c); } } });
 renderer.domElement.addEventListener("pointermove",e=>{ setPointer(e); raycaster.setFromCamera(pointer,camera); const meshes=[]; state.containers.forEach(c=>c.molecules.forEach(m=>m.atoms.forEach(a=>meshes.push(a.mesh)))); const hit=raycaster.intersectObjects(meshes,false)[0]; if(!hit){ hoverMol=null; document.getElementById("inspector").classList.remove("show"); return; } const id=hit.object.parent&&hit.object.parent.userData.molId; hoverMol=null; state.containers.forEach(c=>c.molecules.forEach(m=>{ if(m.id===id) hoverMol=m; })); if(hoverMol) fillInspector(hoverMol); });
-document.getElementById("btnContainer").onclick=()=>createContainer({name:"Béquer "+(state.containers.length+1)});
+document.getElementById("btnContainer").onclick=()=>createContainer({name:"Beaker "+(state.containers.length+1)});
 document.getElementById("btnAdd").onclick=()=>addSubstance(state.selectedFormula.replace(/^atom:/,""),Number(document.getElementById("qty").value));
-document.getElementById("btnFormula").onclick=()=>{ const def=buildFromFormula(document.getElementById("formulaIn").value.trim()); if(!def){ toast("Usa NaH ou NH3, por exemplo."); return; } state.library[def.formula]=def; if(def.flags.custom) localStorage.setItem("mollab-custom",JSON.stringify(Object.values(state.library).filter(x=>x.flags&&x.flags.custom))); state.selectedFormula=def.formula; state.tab=def.flags.custom?"mine":"mol"; setTab(def.flags.custom?"tabMine":"tabMol"); addSubstance(def.formula,Number(document.getElementById("qty").value)||1); };
+document.getElementById("btnFormula").onclick=()=>{ const def=buildFromFormula(document.getElementById("formulaIn").value.trim()); if(!def){ toast("Use NaH or NH3, for example."); return; } state.library[def.formula]=def; if(def.flags.custom) localStorage.setItem("mollab-custom",JSON.stringify(Object.values(state.library).filter(x=>x.flags&&x.flags.custom))); state.selectedFormula=def.formula; state.tab=def.flags.custom?"mine":"mol"; setTab(def.flags.custom?"tabMine":"tabMol"); addSubstance(def.formula,Number(document.getElementById("qty").value)||1); };
 document.getElementById("btnClear").onclick=clearContainer; document.getElementById("btnDelete").onclick=deleteContainer; document.getElementById("btnPour").onclick=pour;
-document.getElementById("btnPlay").onclick=()=>{ state.playing=!state.playing; document.getElementById("btnPlay").textContent=state.playing?"Pausa":"Retomar"; };
-document.getElementById("cName").oninput=e=>{ const c=current(); if(!c) return; c.name=e.target.value||"Recipiente"; document.getElementById("cTitle").textContent=c.name; renderContainerList(); refreshPour(); };
+document.getElementById("btnPlay").onclick=()=>{ state.playing=!state.playing; document.getElementById("btnPlay").textContent=state.playing?"Pause":"Resume"; };
+document.getElementById("cName").oninput=e=>{ const c=current(); if(!c) return; c.name=e.target.value||"Beaker"; document.getElementById("cTitle").textContent=c.name; renderContainerList(); refreshPour(); };
 ["temp","sx","sy","sz"].forEach(id=>{ const apply=()=>readSizeTemp(); document.getElementById(id).oninput=apply; document.getElementById(id+"N").oninput=apply; });
 function setTab(id){ document.querySelectorAll("#left .tabs button").forEach(b=>b.classList.remove("on")); document.getElementById(id).classList.add("on"); state.tab=id==="tabAtom"?"atom":id==="tabMine"?"mine":"mol"; renderLib(); }
 document.getElementById("tabMol").onclick=()=>setTab("tabMol"); document.getElementById("tabAtom").onclick=()=>setTab("tabAtom"); document.getElementById("tabMine").onclick=()=>setTab("tabMine");
@@ -459,16 +491,33 @@ document.getElementById("optGrid").onchange=()=>{ state.showGrid=document.getEle
 document.getElementById("optWalls").onchange=()=>{ state.showWalls=document.getElementById("optWalls").checked; applyView(); savePrefs(); };
 document.getElementById("tempUnit").onchange=()=>{ state.tempUnit=document.getElementById("tempUnit").value; document.getElementById("unitTag").textContent=state.tempUnit==="C"?"°C":state.tempUnit==="F"?"°F":"K"; document.getElementById("heatUnit").textContent=document.getElementById("unitTag").textContent; if(current()) setControl("temp",current().temperature); readSizeTemp(); renderContainerList(); savePrefs(); };
 document.getElementById("maxMols").onchange=()=>{ state.maxMols=Math.max(1,Math.min(80,Number(document.getElementById("maxMols").value)||80)); savePrefs(); };
-document.getElementById("btnHeat").onclick=()=>{ state.heatTarget=toK(document.getElementById("heatTarget").value); state.heatRate=Math.max(1,Number(document.getElementById("heatRate").value)||40); state.heating=!state.heating; document.getElementById("btnHeat").textContent=state.heating?"Parar calor":"Esquentar"; if(state.heating) log("A aquecer até "+formatT(state.heatTarget)+"."); };
+document.getElementById("btnHeat").onclick=()=>{ state.heatTarget=toK(document.getElementById("heatTarget").value); state.heatRate=Math.max(1,Number(document.getElementById("heatRate").value)||40); state.heating=!state.heating; document.getElementById("btnHeat").textContent=state.heating?"Stop heat":"Heat"; if(state.heating) log("Heating to "+formatT(state.heatTarget)+"."); };
 [0.5,1,2,3,5,10].forEach(v=>{ const b=document.createElement("button"); b.className="chip"+(v===state.speed?" on":""); b.textContent="x"+v; b.onclick=()=>{ state.speed=v; [...document.getElementById("speeds").children].forEach(x=>x.classList.remove("on")); b.classList.add("on"); savePrefs(); }; document.getElementById("speeds").appendChild(b); });
 document.getElementById("gfxLow").onclick=()=>{ state.gfx="low"; applyGfx(); savePrefs(); };
 document.getElementById("gfxMid").onclick=()=>{ state.gfx="mid"; applyGfx(); savePrefs(); };
 document.getElementById("gfxHigh").onclick=()=>{ state.gfx="high"; applyGfx(); savePrefs(); };
-document.getElementById("btnView").onclick=()=>{ state.viewMode=!state.viewMode; applyView(); };
-document.addEventListener("keydown",e=>{ const typing=["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName); if(e.key==="Escape"){ document.querySelectorAll(".modal-back").forEach(m=>m.classList.remove("show")); return; } if(typing) return; if(e.key===" "){ e.preventDefault(); document.getElementById("btnPlay").click(); } else if(e.key==="n"||e.key==="N") createContainer({name:"Béquer "+(state.containers.length+1)}); else if(e.key==="c"||e.key==="C") openCreator(); else if(e.key==="v"||e.key==="V"){ state.viewMode=!state.viewMode; applyView(); } else if(e.key==="p"||e.key==="P"){ state.precise=!state.precise; document.getElementById("optPrecise").checked=state.precise; document.body.classList.toggle("precise",state.precise); savePrefs(); } else if(e.key==="d"||e.key==="D") pour(); else if(e.key==="a"||e.key==="A") document.getElementById("btnAdd").click(); else if(e.key==="f"||e.key==="F") focusContainer(current()); else if(e.key==="ArrowRight"||e.key==="ArrowLeft"){ const i=state.containers.findIndex(c=>c.id===state.selected); const next=state.containers[(i+(e.key==="ArrowRight"?1:state.containers.length-1))%state.containers.length]; if(next){ selectContainer(next.id); focusContainer(next); } } else if(e.key==="+"||e.key==="=") nudgeTemp(25); else if(e.key==="-"||e.key==="_") nudgeTemp(-25); else if(e.key==="1") setUnit("K"); else if(e.key==="2") setUnit("C"); else if(e.key==="3") setUnit("F"); });
-function nudgeTemp(dk){ const c=current(); if(!c) return; c.temperature=Math.max(40,Math.min(1800,c.temperature+dk)); setControl("temp",c.temperature); readSizeTemp(); }
+document.getElementById("btnFly").onclick=()=>{ state.fly=!state.fly; document.getElementById("btnFly").classList.toggle("on",state.fly); toast(state.fly?"Camera mode: WASD, Shift up, C down.":"Orbit camera restored."); };
+document.getElementById("toggleLeft").onclick=()=>{ document.getElementById("app").classList.toggle("left-closed"); document.getElementById("toggleLeft").textContent=document.getElementById("app").classList.contains("left-closed")?"⟩":"⟨"; };
+document.getElementById("toggleRight").onclick=()=>{ document.getElementById("app").classList.toggle("right-closed"); document.getElementById("toggleRight").textContent=document.getElementById("app").classList.contains("right-closed")?"⟨":"⟩"; };
+window.addEventListener("keydown",e=>{ flyKeys[e.code]=true; if(state.fly&&["KeyW","KeyA","KeyS","KeyD","KeyC"].includes(e.code)) e.preventDefault(); });
+window.addEventListener("keyup",e=>{ flyKeys[e.code]=false; });
+document.addEventListener("keydown",e=>{ const typing=["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName); if(e.key==="Escape"){ document.querySelectorAll(".modal-back").forEach(m=>m.classList.remove("show")); return; } if(typing) return; if(e.key===" "){ e.preventDefault(); document.getElementById("btnPlay").click(); } else if(e.key==="n"||e.key==="N") createContainer({name:"Beaker "+(state.containers.length+1)}); else if((e.key==="c"||e.key==="C")&&!state.fly) openCreator(); else if(e.key==="v"||e.key==="V"){ state.viewMode=!state.viewMode; applyView(); } else if(e.key==="p"||e.key==="P"){ state.precise=!state.precise; document.getElementById("optPrecise").checked=state.precise; document.body.classList.toggle("precise",state.precise); savePrefs(); } else if(e.key==="d"||e.key==="D") pour(); else if(e.key==="a"||e.key==="A") document.getElementById("btnAdd").click(); else if(e.key==="f"||e.key==="F") focusContainer(current()); else if(e.key==="ArrowRight"||e.key==="ArrowLeft"){ const i=state.containers.findIndex(c=>c.id===state.selected); const next=state.containers[(i+(e.key==="ArrowRight"?1:state.containers.length-1))%state.containers.length]; if(next){ selectContainer(next.id); focusContainer(next); } } else if(e.key==="+"||e.key==="=") nudgeTemp(25); else if(e.key==="-"||e.key==="_") nudgeTemp(-25); else if(e.key==="1") setUnit("K"); else if(e.key==="2") setUnit("C"); else if(e.key==="3") setUnit("F"); });
+function saneKelvin(k){ if(!isFinite(k)||Math.abs(k)<1e-6){ toast("Temperature cannot be 0 K."); return 298; } return k; }
+function flyCamera(dt){
+  if(!state.fly) return;
+  const forward=new THREE.Vector3(); camera.getWorldDirection(forward); forward.y=0; if(forward.lengthSq()<1e-6) forward.set(0,0,-1); forward.normalize();
+  const right=new THREE.Vector3().crossVectors(forward,new THREE.Vector3(0,1,0)).normalize();
+  const move=new THREE.Vector3();
+  if(flyKeys.KeyW) move.add(forward); if(flyKeys.KeyS) move.sub(forward); if(flyKeys.KeyD) move.add(right); if(flyKeys.KeyA) move.sub(right);
+  if(flyKeys.ShiftLeft||flyKeys.ShiftRight) move.y+=1; if(flyKeys.KeyC) move.y-=1;
+  if(!move.lengthSq()) return;
+  move.normalize().multiplyScalar(14*dt*(flyKeys.ShiftLeft||flyKeys.ShiftRight?1.4:1));
+  camera.position.add(move); controls.target.add(move);
+}
+const flyKeys={};
+function nudgeTemp(dk){ const c=current(); if(!c) return; c.temperature=saneKelvin(c.temperature+dk); setControl("temp",c.temperature); readSizeTemp(); }
 function setUnit(unit){ state.tempUnit=unit; document.getElementById("tempUnit").value=unit; document.getElementById("tempUnit").onchange(); }
-function animate(){ requestAnimationFrame(animate); const dt=Math.min(.033,clock.getDelta()); step(dt); if(focusAnim){ focusAnim.t=Math.min(1,focusAnim.t+.08); const k=1-Math.pow(1-focusAnim.t,3); camera.position.lerpVectors(focusAnim.cam,focusAnim.camTo,k); controls.target.lerpVectors(focusAnim.target,focusAnim.targetTo,k); if(focusAnim.t===1) focusAnim=null; } controls.update(); renderer.render(scene,camera); hud(); }
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(.033,clock.getDelta()); step(dt); flyCamera(dt); if(focusAnim){ focusAnim.t=Math.min(1,focusAnim.t+.08); const k=1-Math.pow(1-focusAnim.t,3); camera.position.lerpVectors(focusAnim.cam,focusAnim.camTo,k); controls.target.lerpVectors(focusAnim.target,focusAnim.targetTo,k); if(focusAnim.t===1) focusAnim=null; } controls.update(); renderer.render(scene,camera); hud(); }
 window.addEventListener("resize",()=>{ camera.aspect=view.clientWidth/Math.max(1,view.clientHeight); camera.updateProjectionMatrix(); renderer.setSize(view.clientWidth,view.clientHeight); });
 const creator={atoms:[],bonds:[],selected:-1,element:"C",mode:"place"};
 let cRenderer,cScene,cCamera,cControls,cGroup,cPlane;
@@ -477,7 +526,7 @@ function initCreator(){
   const host=document.getElementById("creatorView"); cRenderer=new THREE.WebGLRenderer({antialias:true}); cRenderer.setSize(host.clientWidth,host.clientHeight); cRenderer.setClearColor(0x070e1b,1); host.appendChild(cRenderer.domElement);
   cScene=new THREE.Scene(); cCamera=new THREE.PerspectiveCamera(45,host.clientWidth/Math.max(1,host.clientHeight),.1,100); cCamera.position.set(4,4,7); cControls=makeControls(cCamera,cRenderer.domElement); if(cControls.mouseButtons) cControls.mouseButtons.LEFT=THREE.MOUSE.PAN;
   cScene.add(new THREE.AmbientLight(0xffffff,.7)); const dl=new THREE.DirectionalLight(0xffffff,.8); dl.position.set(3,5,4); cScene.add(dl,new THREE.GridHelper(10,10,0x245,0x123)); cGroup=new THREE.Group(); cScene.add(cGroup); cPlane=new THREE.Mesh(new THREE.PlaneGeometry(12,12), new THREE.MeshBasicMaterial({visible:false})); cPlane.rotation.x=-Math.PI/2; cScene.add(cPlane);
-  const pal=document.getElementById("elPalette"); Object.keys(ELEMENTS).forEach(el=>{ const b=document.createElement("button"); b.className="chip"+(el==="C"?" on":""); b.textContent=el; b.onclick=()=>{ creator.element=el; [...pal.children].forEach(x=>x.classList.remove("on")); b.classList.add("on"); document.getElementById("creatorHint").textContent="Modo colocar: clica no plano para pôr "+el+"."; }; pal.appendChild(b); });
+  const pal=document.getElementById("elPalette"); Object.keys(ELEMENTS).forEach(el=>{ const b=document.createElement("button"); b.className="chip"+(el==="C"?" on":""); b.textContent=el; b.onclick=()=>{ creator.element=el; [...pal.children].forEach(x=>x.classList.remove("on")); b.classList.add("on"); document.getElementById("creatorHint").textContent="Modo colocar: clica no plano into pôr "+el+"."; }; pal.appendChild(b); });
   ["NaH","NH3","H2O","CH4","CO2"].forEach(f=>{ const b=document.createElement("button"); b.className="chip"; b.textContent=f; b.onclick=()=>loadIntoCreator(f); document.getElementById("starters").appendChild(b); });
   const ray=new THREE.Raycaster(), pt=new THREE.Vector2(); let drag=null;
   function localPointer(e){ const r=cRenderer.domElement.getBoundingClientRect(); pt.x=((e.clientX-r.left)/r.width)*2-1; pt.y=-((e.clientY-r.top)/r.height)*2+1; ray.setFromCamera(pt,cCamera); }
@@ -490,14 +539,14 @@ function resizeCreator(){ const host=document.getElementById("creatorView"); if(
 function loadIntoCreator(formula){ const def=buildFromFormula(formula); if(!def) return; creator.atoms=def.atoms.map(a=>({el:a.el,x:a.x,y:a.y,z:a.z})); creator.bonds=def.bonds.map(b=>[b[0],b[1]]); creator.selected=-1; document.getElementById("molFormula").value=def.formula; document.getElementById("molName").value=def.name; rebuildCreator(); }
 function guessFormula(){ const counts={}; creator.atoms.forEach(a=>counts[a.el]=(counts[a.el]||0)+1); const order=["C","H","N","O","Na","Cl","S","P","K","Ca","Fe","Mg","F","Br","I"]; document.getElementById("molFormula").value=Object.keys(counts).sort((a,b)=>order.indexOf(a)-order.indexOf(b)).map(k=>k+(counts[k]>1?counts[k]:"")).join("")||"X"; }
 function rebuildCreator(){ while(cGroup.children.length) cGroup.remove(cGroup.children[0]); creator.atoms.forEach((a,i)=>{ const el=ELEMENTS[a.el]; const mesh=new THREE.Mesh(new THREE.SphereGeometry(el.r,18,14), new THREE.MeshPhongMaterial({color:el.color,emissive:creator.selected===i?0x114433:0})); mesh.position.set(a.x,a.y,a.z); mesh.userData.atomIndex=i; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:labelTex(a.el),transparent:true})); sp.scale.set(.8,.4,1); sp.position.y=el.r+.35; mesh.add(sp); cGroup.add(mesh); }); creator.bonds.forEach(([i,j])=>{ const A=creator.atoms[i], B=creator.atoms[j]; if(!A||!B) return; const ha=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,1,8), new THREE.MeshPhongMaterial({color:ELEMENTS[A.el].color})); const hb=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,1,8), new THREE.MeshPhongMaterial({color:ELEMENTS[B.el].color})); placeHalf(ha,new THREE.Vector3(A.x,A.y,A.z),new THREE.Vector3(B.x,B.y,B.z),0); placeHalf(hb,new THREE.Vector3(A.x,A.y,A.z),new THREE.Vector3(B.x,B.y,B.z),1); cGroup.add(ha,hb); }); document.getElementById("bondList").innerHTML=creator.bonds.map((b,i)=>"Ligação "+(b[0]+1)+"–"+(b[1]+1)+" ("+creator.atoms[b[0]].el+"–"+creator.atoms[b[1]].el+") <button data-b='"+i+"'>x</button>").join("<br>")||"Sem ligações"; document.getElementById("bondList").querySelectorAll("button").forEach(btn=>btn.onclick=()=>{ creator.bonds.splice(Number(btn.dataset.b),1); rebuildCreator(); }); if(document.activeElement.id!=="molFormula") guessFormula(); }
-function setCreatorMode(mode){ creator.mode=mode; ["modePlace","modeBond","modeMove"].forEach(id=>document.getElementById(id).classList.remove("on")); document.getElementById(mode==="bond"?"modeBond":mode==="move"?"modeMove":"modePlace").classList.add("on"); document.getElementById("creatorHint").textContent=mode==="bond"?"Clica num átomo e depois noutro para ligar.":mode==="move"?"Arrasta um átomo no plano.":"Clica no plano para colocar "+creator.element+"."; }
+function setCreatorMode(mode){ creator.mode=mode; ["modePlace","modeBond","modeMove"].forEach(id=>document.getElementById(id).classList.remove("on")); document.getElementById(mode==="bond"?"modeBond":mode==="move"?"modeMove":"modePlace").classList.add("on"); document.getElementById("creatorHint").textContent=mode==="bond"?"Clica num átomo e depois noutro into ligar.":mode==="move"?"Drag an atom on the plane.":"Clica no plano into colocar "+creator.element+"."; }
 document.getElementById("btnCreator").onclick=openCreator; document.getElementById("closeCreator").onclick=()=>document.getElementById("creator").classList.remove("show");
 document.getElementById("modePlace").onclick=()=>setCreatorMode("place"); document.getElementById("modeBond").onclick=()=>setCreatorMode("bond"); document.getElementById("modeMove").onclick=()=>setCreatorMode("move");
 document.getElementById("delAtom").onclick=()=>{ if(creator.selected<0) return; const drop=creator.selected; const map=[]; let k=0; for(let i=0;i<creator.atoms.length;i++) map[i]=i===drop?-1:k++; creator.atoms=creator.atoms.filter((_,i)=>i!==drop); creator.bonds=creator.bonds.map(([a,b])=>[map[a],map[b]]).filter(([a,b])=>a>=0&&b>=0); creator.selected=-1; rebuildCreator(); };
 document.getElementById("clearBuild").onclick=()=>{ creator.atoms=[]; creator.bonds=[]; creator.selected=-1; rebuildCreator(); };
-document.getElementById("saveMol").onclick=()=>{ if(!creator.atoms.length){ toast("Coloca pelo menos um átomo."); return; } const formulaRaw=document.getElementById("molFormula").value.trim()||"MOL"; const formula=state.library[formulaRaw]&&!(state.library[formulaRaw].flags||{}).custom?formulaRaw+"*":formulaRaw; const def=mol(formula,document.getElementById("molName").value.trim()||formula,creator.atoms.map(a=>({el:a.el,x:a.x,y:a.y,z:a.z})),creator.bonds.map(b=>[b[0],b[1]]),{custom:true,isolated:creator.atoms.length===1}); state.library[formula]=def; localStorage.setItem("mollab-custom",JSON.stringify(Object.values(state.library).filter(x=>x.flags&&x.flags.custom))); state.selectedFormula=formula; setTab("tabMine"); addSubstance(formula,Number(document.getElementById("qty").value)||1); toast("Molécula guardada e colocada."); document.getElementById("creator").classList.remove("show"); };
+document.getElementById("saveMol").onclick=()=>{ if(!creator.atoms.length){ toast("Place at least one atom."); return; } const formulaRaw=document.getElementById("molFormula").value.trim()||"MOL"; const formula=state.library[formulaRaw]&&!(state.library[formulaRaw].flags||{}).custom?formulaRaw+"*":formulaRaw; const def=mol(formula,document.getElementById("molName").value.trim()||formula,creator.atoms.map(a=>({el:a.el,x:a.x,y:a.y,z:a.z})),creator.bonds.map(b=>[b[0],b[1]]),{custom:true,isolated:creator.atoms.length===1}); state.library[formula]=def; localStorage.setItem("mollab-custom",JSON.stringify(Object.values(state.library).filter(x=>x.flags&&x.flags.custom))); state.selectedFormula=formula; setTab("tabMine"); addSubstance(formula,Number(document.getElementById("qty").value)||1); toast("Molecule saved and added."); document.getElementById("creator").classList.remove("show"); };
 document.body.classList.toggle("precise",state.precise); document.getElementById("optPrecise").checked=!!state.precise; document.getElementById("optAtoms").checked=state.showAtoms; document.getElementById("optMols").checked=state.showMols; document.getElementById("optGrid").checked=state.showGrid; document.getElementById("optWalls").checked=state.showWalls; document.getElementById("tempUnit").value=state.tempUnit; document.getElementById("maxMols").value=state.maxMols; document.getElementById("unitTag").textContent=state.tempUnit==="C"?"°C":state.tempUnit==="F"?"°F":"K";
-renderLib(); createContainer({name:"Béquer 1",temperature:298}); addSubstance("H2O",6); applyGfx(); applyView(); log("Clica no béquer para centrar a câmara. Ferramentas estão na aba da direita."); animate();
+renderLib(); createContainer({name:"Beaker 1",temperature:298}); addSubstance("H2O",6); applyGfx(); applyView(); log("Clica no béquer into centrar a câmara. Ferramentas estão na aba da direita."); animate();
 </script>
 </body>
 </html>
