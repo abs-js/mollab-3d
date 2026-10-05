@@ -9,7 +9,8 @@
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:"Segoe UI",system-ui,sans-serif; }
   body { overflow:hidden; }
-  #app.left-closed { grid-template-columns: 0 1fr 330px; }
+  #app { display:grid; grid-template-columns:300px minmax(0,1fr) 330px; grid-template-rows:58px minmax(0,1fr); height:100%; }
+  #app.left-closed { grid-template-columns:0 minmax(0,1fr) 330px; }
   #app.right-closed { grid-template-columns: 300px 1fr 0; }
   #app.left-closed.right-closed { grid-template-columns: 0 1fr 0; }
   #app.left-closed #left, #app.right-closed #right { overflow:hidden; visibility:hidden; }
@@ -497,8 +498,8 @@ document.getElementById("gfxLow").onclick=()=>{ state.gfx="low"; applyGfx(); sav
 document.getElementById("gfxMid").onclick=()=>{ state.gfx="mid"; applyGfx(); savePrefs(); };
 document.getElementById("gfxHigh").onclick=()=>{ state.gfx="high"; applyGfx(); savePrefs(); };
 document.getElementById("btnFly").onclick=()=>{ state.fly=!state.fly; document.getElementById("btnFly").classList.toggle("on",state.fly); toast(state.fly?"Camera mode: WASD, Shift up, C down.":"Orbit camera restored."); };
-document.getElementById("toggleLeft").onclick=()=>{ document.getElementById("app").classList.toggle("left-closed"); document.getElementById("toggleLeft").textContent=document.getElementById("app").classList.contains("left-closed")?"⟩":"⟨"; };
-document.getElementById("toggleRight").onclick=()=>{ document.getElementById("app").classList.toggle("right-closed"); document.getElementById("toggleRight").textContent=document.getElementById("app").classList.contains("right-closed")?"⟨":"⟩"; };
+document.getElementById("toggleLeft").onclick=()=>{ document.getElementById("app").classList.toggle("left-closed"); document.getElementById("toggleLeft").textContent=document.getElementById("app").classList.contains("left-closed")?"⟩":"⟨"; requestAnimationFrame(()=>window.dispatchEvent(new Event("resize"))); };
+document.getElementById("toggleRight").onclick=()=>{ document.getElementById("app").classList.toggle("right-closed"); document.getElementById("toggleRight").textContent=document.getElementById("app").classList.contains("right-closed")?"⟨":"⟩"; requestAnimationFrame(()=>window.dispatchEvent(new Event("resize"))); };
 window.addEventListener("keydown",e=>{ flyKeys[e.code]=true; if(state.fly&&["KeyW","KeyA","KeyS","KeyD","KeyC"].includes(e.code)) e.preventDefault(); });
 window.addEventListener("keyup",e=>{ flyKeys[e.code]=false; });
 document.addEventListener("keydown",e=>{ const typing=["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName); if(e.key==="Escape"){ document.querySelectorAll(".modal-back").forEach(m=>m.classList.remove("show")); return; } if(typing) return; if(e.key===" "){ e.preventDefault(); document.getElementById("btnPlay").click(); } else if(e.key==="n"||e.key==="N") createContainer({name:"Beaker "+(state.containers.length+1)}); else if((e.key==="c"||e.key==="C")&&!state.fly) openCreator(); else if(e.key==="v"||e.key==="V"){ state.viewMode=!state.viewMode; applyView(); } else if(e.key==="p"||e.key==="P"){ state.precise=!state.precise; document.getElementById("optPrecise").checked=state.precise; document.body.classList.toggle("precise",state.precise); savePrefs(); } else if(e.key==="d"||e.key==="D") pour(); else if(e.key==="a"||e.key==="A") document.getElementById("btnAdd").click(); else if(e.key==="f"||e.key==="F") focusContainer(current()); else if(e.key==="ArrowRight"||e.key==="ArrowLeft"){ const i=state.containers.findIndex(c=>c.id===state.selected); const next=state.containers[(i+(e.key==="ArrowRight"?1:state.containers.length-1))%state.containers.length]; if(next){ selectContainer(next.id); focusContainer(next); } } else if(e.key==="+"||e.key==="=") nudgeTemp(25); else if(e.key==="-"||e.key==="_") nudgeTemp(-25); else if(e.key==="1") setUnit("K"); else if(e.key==="2") setUnit("C"); else if(e.key==="3") setUnit("F"); });
