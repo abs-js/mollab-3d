@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MOLecularLAB — 3D Molecular Simulator</title>
+<title>MOLLAB — 3D Molecular Simulator</title>
 <style>
   :root { --bg:#07101c; --panel:rgba(10,18,34,.94); --line:rgba(130,190,255,.18); --text:#e7f0ff; --muted:#8ea3c4; --accent:#2ee6c7; --danger:#ff6b7a; }
   * { box-sizing:border-box; }
@@ -458,6 +458,7 @@ function tryCombustion(c,P,note){
   renderContainerList();
   return true;
 }
+function atomCounts(m){ const counts={}; m.atoms.forEach(a=>counts[a.el]=(counts[a.el]||0)+1); return counts; }
 function isFuel(m){
   if(m.flags&&m.flags.ion) return false;
   const k=molKind(m);
