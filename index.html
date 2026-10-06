@@ -183,6 +183,7 @@
   <label class="check"><input id="optGrid" type="checkbox" checked> Show grid</label>
   <label class="check"><input id="optWalls" type="checkbox" checked> Show walls</label>
   <label class="field">Difficulty <select id="modePick"><option value="student">Student</option><option value="advanced">Advanced</option><option value="scientist">Scientist</option></select><b></b></label>
+  <label class="field">Readout <select id="tempUnit"><option value="K">Kelvin (K)</option><option value="C">Celsius (°C)</option><option value="F">Fahrenheit (°F)</option></select><b id="unitTag">K</b></label>
   <label class="field">Limit <input id="maxMols" type="number" min="1" max="80" value="80"><b>mol.</b></label>
   <p class="help"><kbd>Space</kbd> pause · <kbd>N</kbd> beaker · <kbd>C</kbd> builder · <kbd>F</kbd> focus · <kbd>V</kbd> this beaker · <kbd>X</kbd> empty · <kbd>A</kbd><kbd>D</kbd> camera only · <kbd>←</kbd><kbd>→</kbd> switch · <kbd>+</kbd><kbd>-</kbd> temperature · <kbd>B</kbd> sidebars · <kbd>Esc</kbd> close · camera mode: <kbd>WASD</kbd> <kbd>Shift</kbd> up <kbd>C</kbd> down</p>
   <button id="closeSettings">Close</button>
@@ -223,7 +224,7 @@
   <p class="help">Student: preset molecules, mild heat, and the heat tool. Advanced: formula builder and more beakers. Scientist: everything, including the MolView builder.</p>
   <div class="row"><button id="pickStudent" class="primary">Student</button><button id="pickAdvanced">Advanced</button><button id="pickScientist">Scientist</button></div>
 </div></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<div id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
 const ELEMENTS = {
