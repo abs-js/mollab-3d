@@ -348,7 +348,7 @@ const grid=new THREE.GridHelper(80,24,0x1c3d55,0x13283c); grid.position.y=-8; sc
 const raycaster=new THREE.Raycaster(), pointer=new THREE.Vector2(), clock=new THREE.Clock(), UP=new THREE.Vector3(0,1,0);
 let uid=1, hoverMol=null, focusAnim=null, pointerDown=null, inspectDrag=false;
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.style.display="block"; clearTimeout(toast._t); toast._t=setTimeout(()=>t.style.display="none",2400); }
-function log(msg){ if(!/→|fusion|combustion|neutral|dissolv|decompos|fragment bond|free electron|H3O|released energy|absorbed energy/.test(msg)) return; const box=document.getElementById("log"); const d=document.createElement("div"); d.textContent=new Date().toLocaleTimeString()+" · "+msg; box.prepend(d); while(box.children.length>12) box.removeChild(box.lastChild); }
+function log(msg){ if(!/→|fusion|combustion|neutral|dissolv|decompos|snapped|broke|fragment bond|free electron|H3O|released energy|absorbed energy/.test(msg)) return; const box=document.getElementById("log"); const d=document.createElement("div"); d.textContent=new Date().toLocaleTimeString()+" · "+msg; box.prepend(d); while(box.children.length>12) box.removeChild(box.lastChild); }
 function seg(){ return state.gfx==="low"?8:state.gfx==="high"?24:16; }
 function makeWalls(size,id){ const g=new THREE.Group(); const geo=new THREE.BoxGeometry(size.x,size.y,size.z); const glass=new THREE.Mesh(geo,new THREE.MeshPhongMaterial({color:0x88ccee,transparent:true,opacity:.07,side:THREE.DoubleSide,depthWrite:false})); const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:0x7ee7ff})); const floor=new THREE.Mesh(new THREE.BoxGeometry(size.x,.08,size.z),new THREE.MeshPhongMaterial({color:0x123049,transparent:true,opacity:.45})); floor.position.y=-size.y/2; g.add(glass,edges,floor); g.userData.edges=edges; g.userData.glass=glass; g.traverse(o=>o.userData.containerId=id); return g; }
 function tempColor(t){ return new THREE.Color().setHSL(.55-Math.min(1,Math.max(0,(t-200)/1200))*.55,.8,.55); }
@@ -406,7 +406,7 @@ function step(dt){
       m.group.position.addScaledVector(m.velocity,scaled*2.2);
       m.group.rotation.x+=m.spin.x*scaled*(.4+speed); m.group.rotation.y+=m.spin.y*scaled*(.4+speed);
       const amp=Math.min(.12,c.temperature/1800*.12);
-      m.atoms.forEach((a,idx)=>{ const wob=Math.sin(performance.now()/160+idx*1.7)*amp; a.mesh.position.copy(a.base).add(new THREE.Vector3(wob,-wob*.6,wob*.4)); if(state.gfx==="high") a.electrons.forEach((e,i)=>{ const ang=performance.now()/380+i*1.3; const shell=.55+(i%2)*.28; e.position.set(Math.cos(ang+i)*shell, Math.sin(ang*1.2)*0.12, Math.sin(ang+i)*shell); }); });
+      m.atoms.forEach((a,idx)=>{ const wob=Math.sin(performance.now()/160+idx*1.7)*amp; a.mesh.position.copy(a.base).add(new THREE.Vector3(wob,-wob*.6,wob*.4)); if(c.temperature>1400) a.mesh.position.add(a.base.clone().multiplyScalar(0.08)); if(state.gfx==="high") a.electrons.forEach((e,i)=>{ const ang=performance.now()/380+i*1.3; const shell=.55+(i%2)*.28; e.position.set(Math.cos(ang+i)*shell, Math.sin(ang*1.2)*0.12, Math.sin(ang+i)*shell); }); });
       updateBonds(m);
       const p=m.group.position; ["x","y","z"].forEach(axis=>{ const lim=c.size[axis]/2-1.15; if(p[axis]>lim||p[axis]<-lim){ p[axis]=Math.max(-lim,Math.min(lim,p[axis])); m.velocity[axis]*=-.86; } });
     });
@@ -425,7 +425,7 @@ function step(dt){
     }
     softStructures(c,scaled); stepElectrons(c,scaled);
   });
-  if(state.playing) state.containers.forEach(c=>{ tryCombustion(c,pressureOf(c),noteOnce); tryHf(c,pressureOf(c),noteOnce); tryFuse(c,pressureOf(c),noteOnce,scaled); growValence(c); });
+  if(state.playing) state.containers.forEach(c=>{ const P=pressureOf(c); if(P&&c.temperature>1400&&P.atm<2.5) snapBond(c); tryCombustion(c,P,noteOnce); tryHf(c,P,noteOnce); tryFuse(c,P,noteOnce,scaled); growValence(c); });
   if(Math.random()<scaled*1.4) reactions();
 }
 function reactions(){
@@ -454,10 +454,34 @@ function reactions(){
     if(tryFuse(c,P,note)) changed=true;
     if(c.temperature>1400){
       if(P.atm>=2.5) note("dec","decomposition temperature, but pressure is too high (keep it below 2.50 atm).");
-      else { const victim=c.molecules.find(m=>m.atoms.length>1&&!(m.flags&&m.flags.ion)&&Math.random()<.25); if(victim){ const p=victim.group.position.clone(), atoms=victim.atoms.map(a=>a.el), formula=victim.formula; removeMol(victim); const bits=atoms.map((el,i)=>spawn({formula:el,name:ELEMENTS[el].name+" isolated",atoms:[{el:el,x:0,y:0,z:0}],bonds:[],flags:{fragment:true,isolated:true}},c,p.clone().add(new THREE.Vector3((i-1)*.7,.3,0)))); reactEnergy(bits,-80,c.name+": decomposition absorbed energy"); log(c.name+": decomposition of "+formula+"."); changed=true; } }
     }
   });
   if(changed) renderContainerList();
+}
+function snapBond(c){
+  const victim=c.molecules.find(m=>m.bonds.length&&!(m.flags&&m.flags.ion));
+  if(!victim) return;
+  const bond=victim.bonds.pop();
+  victim.group.remove(bond.ha); victim.group.remove(bond.hb);
+  const seen=new Set(), parts=[];
+  victim.atoms.forEach((_,start)=>{
+    if(seen.has(start)) return;
+    const stack=[start], part=[];
+    while(stack.length){ const i=stack.pop(); if(seen.has(i)) continue; seen.add(i); part.push(i); victim.bonds.forEach(b=>{ if(b.i===i) stack.push(b.j); if(b.j===i) stack.push(b.i); }); }
+    parts.push(part);
+  });
+  if(parts.length<2){ log(c.name+": a bond in "+victim.formula+" snapped."); return; }
+  const pos=victim.group.position.clone(), formula=victim.formula, temp=victim.temp||c.temperature;
+  const saved=victim.bonds.slice();
+  removeMol(victim);
+  parts.forEach((part,n)=>{
+    const map={}; part.forEach((old,i)=>map[old]=i);
+    const atoms=part.map(i=>({el:victim.atoms[i].el,x:(i%3-1)*0.8,y:0,z:0}));
+    const bonds=saved.filter(b=>map[b.i]!=null&&map[b.j]!=null).map(b=>[map[b.i],map[b.j]]);
+    const spawned=spawn({formula:atoms.map(a=>a.el).join(""),name:"broken "+formula,atoms:atoms,bonds:bonds,flags:{fragment:true,isolated:atoms.length===1}},c,pos.clone().add(new THREE.Vector3((n-0.5)*1.2,0.2,0)));
+    spawned.temp=Math.max(20,temp-40);
+  });
+  log(c.name+": decomposition broke "+formula+" into "+parts.length+" pieces.");
 }
 function tryFuse(c,P,note,scaled){
   if(!c||!P) return false;
