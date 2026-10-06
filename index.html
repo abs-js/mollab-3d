@@ -255,7 +255,7 @@ const PRESETS = [
   mol("NaH","Sodium hydride",[{el:"Na",x:-0.95,y:0,z:0},{el:"H",x:0.95,y:0,z:0}],[[0,1]]),
   mol("C6H6","Benzene",[],[])
 ];
-(function(){ const b=PRESETS.find(p=>p.formula==="C6H6"); for(let i=0;i<6;i++){ const a=i*Math.PI/3; b.atoms.push({el:"C",x:1.4*Math.cos(a),y:1.4*Math.sin(a),z:0}); } for(let i=0;i<6;i++){ const a=i*Math.PI/3; b.atoms.push({el:"H",x:2.48*Math.cos(a),y:2.48*Math.sin(a),z:0}); b.bonds.push([i,(i+1)%6],[i,i+6]); } })();
+(function(){ const b=PRESETS.find(p=>p.formula==="C6H6"); for(let i=0;i<6;i++){ const a=i*Math.PI/3; b.atoms.push({el:"C",x:1.4*Math.cos(a),y:1.4*Math.sin(a),z:0}); } for(let i=0;i<6;i++){ const a=i*Math.PI/3; b.atoms.push({el:"H",x:2.48*Math.cos(a),y:2.48*Math.sin(a),z:0}); b.bonds.push([i,(i+1)%6],[i,i+6]); } b.bonds.push([0,1],[2,3],[4,5]); })();
 const labelCache={};
 function hex(c){ return "#"+c.toString(16).padStart(6,"0"); }
 function roundRect(g,x,y,w,h,r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
@@ -277,7 +277,7 @@ const VALENCE_E={H:1,C:4,N:5,O:6,F:7,Na:1,Mg:2,P:5,S:6,Cl:7,K:1,Ca:2,Fe:2,Br:7,I
 const EN_TABLE={H:2.2,C:2.55,N:3.04,O:3.44,F:3.98,Na:0.93,Mg:1.31,P:2.19,S:2.58,Cl:3.16,K:0.82,Ca:1,Fe:1.83,Br:2.96,I:2.66};
 function assembleMolecule(atoms){
   const n=atoms.length, val=atoms.map(el=>VALENCE[el]||1), used=atoms.map(()=>0), bonds=[];
-  function link(i,j){ if(i===j||used[i]>=val[i]||used[j]>=val[j]) return false; if(bonds.some(b=>(b[0]===i&&b[1]===j)||(b[0]===j&&b[1]===i))) return false; bonds.push([i,j]); used[i]++; used[j]++; return true; }
+  function link(i,j){ if(i===j||used[i]>=val[i]||used[j]>=val[j]) return false; const same=bonds.filter(b=>(b[0]===i&&b[1]===j)||(b[0]===j&&b[1]===i)).length; if(same>=3) return false; bonds.push([i,j]); used[i]++; used[j]++; return true; }
   const heavy=atoms.map((el,i)=>i).filter(i=>atoms[i]!=="H");
   const carbons=heavy.filter(i=>atoms[i]==="C");
   const others=heavy.filter(i=>atoms[i]!=="C");
@@ -302,13 +302,14 @@ function caffeineShape(){
     {el:"C",x:4.8,y:-0.6,z:0.3},{el:"C",x:4.6,y:2.2,z:0.3},
     {el:"O",x:-1.3,y:-1.6,z:0.2},{el:"O",x:0.8,y:-3.4,z:0.2}
   ];
-  for(let i=0;i<10;i++) atoms.push({el:"H",x:-1.8+i*0.55,y:3.1,z:(i%2?0.8:-0.4)});
+  for(let i=0;i<10;i++){ const host=[0,8,9,9,10,10,11,11,11,2][i]; const base=atoms[host]; atoms.push({el:"H",x:base.x+(i%2?0.7:-0.7),y:base.y+0.55,z:base.z+(i%3-1)*0.45}); }
   const bonds=[[0,1],[1,2],[2,3],[3,4],[4,5],[5,0],[2,6],[6,7],[7,8],[8,1],[6,10],[7,11],[5,12],[4,13]];
   [[0,14],[8,15],[9,16],[9,17],[10,18],[10,19],[11,20],[11,21],[11,22],[2,23]].forEach(b=>bonds.push(b));
   return mol("C8H10N4O2","Caffeine",atoms,bonds,{});
 }
 const state={ containers:[], selected:null, library:{}, playing:true, selectedFormula:"H2O", tab:"mol", precise:false, packet:0.002, showAtoms:true, showMols:true, tempUnit:"K", viewMode:false, maxMols:80, showGrid:true, showWalls:true, speed:1, gfx:"mid", heating:false, heatTarget:800, heatRate:40, mode:"scientist" };
 PRESETS.forEach(p=>state.library[p.formula]=p);
+(function(){ const add=(f,pairs)=>{ const p=state.library[f]; if(p) pairs.forEach(b=>p.bonds.push(b)); }; add("O2",[[0,1]]); add("N2",[[0,1],[0,1]]); add("CO2",[[0,1],[0,2]]); })();
 Object.keys(ELEMENTS).forEach(el=>state.library["atom:"+el]=mol(el,ELEMENTS[el].name+" isolated",[{el:el,x:0,y:0,z:0}],[],{isolated:true,atom:true}));
 try { JSON.parse(localStorage.getItem("mollab-custom")||"[]").forEach(p=>{ p.flags=Object.assign({custom:true},p.flags); state.library[p.formula]=p; }); const prefs=JSON.parse(localStorage.getItem("mollab-prefs")||"{}"); Object.assign(state, prefs); } catch(e) {}
 const view=document.getElementById("view");
@@ -356,7 +357,9 @@ function spawn(def,container,at){
     group.add(mesh); return {el:a.el,mesh:mesh,base:new THREE.Vector3(a.x,a.y,a.z),nucleus:nucleus,electrons:electrons};
   });
   const bonds=[];
-  (def.bonds||[]).forEach(([i,j])=>{ const ha=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,1,8), new THREE.MeshPhongMaterial({color:ELEMENTS[def.atoms[i].el].color})); const hb=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,1,8), new THREE.MeshPhongMaterial({color:ELEMENTS[def.atoms[j].el].color})); group.add(ha,hb); bonds.push({i:i,j:j,ha:ha,hb:hb,ionic:Math.abs((EN_TABLE[def.atoms[i].el]||2)-(EN_TABLE[def.atoms[j].el]||2))>=1.7}); });
+  const grouped={};
+  (def.bonds||[]).forEach(([i,j])=>{ const key=Math.min(i,j)+"-"+Math.max(i,j); (grouped[key]=grouped[key]||[]).push([i,j]); });
+  Object.values(grouped).forEach(list=>{ list.forEach((pair,slot)=>{ const ha=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,1,8), new THREE.MeshPhongMaterial({color:ELEMENTS[def.atoms[pair[0]].el].color})); const hb=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,1,8), new THREE.MeshPhongMaterial({color:ELEMENTS[def.atoms[pair[1]].el].color})); group.add(ha,hb); bonds.push({i:pair[0],j:pair[1],ha:ha,hb:hb,slot:slot,order:list.length,ionic:Math.abs((EN_TABLE[def.atoms[pair[0]].el]||2)-(EN_TABLE[def.atoms[pair[1]].el]||2))>=1.7}); }); });
   const top=Math.max(...def.atoms.map(a=>a.y+(ELEMENTS[a.el]?ELEMENTS[a.el].r:.4)),.4);
   const title=new THREE.Sprite(new THREE.SpriteMaterial({map:labelTex(def.formula+"  "+def.name,true),transparent:true,depthTest:false}));
   title.scale.set(2.4,.6,1); title.position.set(0,top+.85,0); title.visible=state.showMols&&state.gfx!=="low"; group.add(title);
@@ -364,8 +367,8 @@ function spawn(def,container,at){
   group.position.copy(at||new THREE.Vector3((Math.random()-.5)*(container.size.x-3),(Math.random()-.5)*(container.size.y-3),(Math.random()-.5)*(container.size.z-3)));
   group.userData.molId=m.id; container.group.add(group); container.molecules.push(m); updateBonds(m); return m;
 }
-function updateBonds(m){ m.bonds.forEach(b=>{ placeHalf(b.ha,m.atoms[b.i].mesh.position,m.atoms[b.j].mesh.position,0,b.ionic); placeHalf(b.hb,m.atoms[b.i].mesh.position,m.atoms[b.j].mesh.position,1,b.ionic); }); }
-function placeHalf(mesh,a,b,side,ionic){ const dir=new THREE.Vector3().subVectors(b,a); const len=dir.length(); if(len<1e-4) return; const n=dir.clone().normalize(); const gap=ionic?0.55:0.02; const mid=len*0.5; const start=side===0?a:a.clone().addScaledVector(n,mid+gap*0.5); const end=side===0?a.clone().addScaledVector(n,Math.max(0.05,mid-gap*0.5)):b; mesh.position.copy(start).lerp(end,.5); mesh.quaternion.setFromUnitVectors(UP,n); mesh.scale.set(1,Math.max(0.05,start.distanceTo(end)),1); }
+function updateBonds(m){ m.bonds.forEach(b=>{ const off=(b.slot-(b.order-1)/2)*0.18; placeHalf(b.ha,m.atoms[b.i].mesh.position,m.atoms[b.j].mesh.position,0,b.ionic,off); placeHalf(b.hb,m.atoms[b.i].mesh.position,m.atoms[b.j].mesh.position,1,b.ionic,off); }); }
+function placeHalf(mesh,a,b,side,ionic,off){ const dir=new THREE.Vector3().subVectors(b,a); const len=dir.length(); if(len<1e-4) return; const n=dir.clone().normalize(); const sideDir=new THREE.Vector3().crossVectors(n,new THREE.Vector3(0,1,0)); if(sideDir.lengthSq()<1e-4) sideDir.set(1,0,0); sideDir.normalize().multiplyScalar(off||0); const gap=ionic?0.55:0.02; const mid=len*0.5; const start=(side===0?a.clone():a.clone().addScaledVector(n,mid+gap*0.5)).add(sideDir); const end=(side===0?a.clone().addScaledVector(n,Math.max(0.05,mid-gap*0.5)):b.clone()).add(sideDir); mesh.position.copy(start).lerp(end,.5); mesh.quaternion.setFromUnitVectors(UP,n); mesh.scale.set(1,Math.max(0.05,start.distanceTo(end)),1); }
 function removeMol(m){ const c=state.containers.find(x=>x.id===m.containerId); if(!c) return; c.group.remove(m.group); m.group.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); c.molecules=c.molecules.filter(x=>x.id!==m.id); }
 function addSubstance(formula,n){ const c=current(); if(!c){ toast("Create a beaker first."); return; } const def=state.library[formula]||buildFromFormula(formula); if(!def){ toast("Formula not recognized."); return; } if(!state.library[def.formula]) state.library[def.formula]=def; const count=Math.max(1,Math.min(24,n||1)); if(c.molecules.length+count>state.maxMols){ toast("Graphics limit of "+state.maxMols+" molecules."); return; } for(let i=0;i<count;i++) spawn(def,c); log(count+" × "+def.formula+" in "+c.name); state.selectedFormula=def.flags&&def.flags.atom?"atom:"+def.formula:def.formula; renderLib(); renderContainerList(); }
 function removeFiltered(mode){ const c=current(); const q=(document.getElementById("removeFilter").value||"").trim().toLowerCase(); if(!c||!q){ toast("Type a formula first."); return; } let n=0; c.molecules.slice().forEach(m=>{ const hit=m.formula.toLowerCase()===q||(m.name||"").toLowerCase()===q; if(mode==="only"?hit:!hit){ removeMol(m); n++; } }); log(c.name+": removed "+n+" "+(mode==="only"?"matching":"except")+" "+q+"."); renderContainerList(); }
@@ -390,7 +393,7 @@ function step(dt){
       const p=m.group.position; ["x","y","z"].forEach(axis=>{ const lim=c.size[axis]/2-1.15; if(p[axis]>lim||p[axis]<-lim){ p[axis]=Math.max(-lim,Math.min(lim,p[axis])); m.velocity[axis]*=-.86; } });
     });
     for(let i=0;i<c.molecules.length;i++) for(let j=i+1;j<c.molecules.length;j++){ const d=c.molecules[i].group.position.distanceTo(c.molecules[j].group.position); if(d<1.7&&d>0.001){ const push=c.molecules[i].group.position.clone().sub(c.molecules[j].group.position).normalize().multiplyScalar((1.7-d)*.5); c.molecules[i].group.position.add(push); c.molecules[j].group.position.sub(push); const hot=c.molecules[i].temp||c.temperature, cold=c.molecules[j].temp||c.temperature, mix=(hot+cold)/2; c.molecules[i].temp=hot+(mix-hot)*0.35; c.molecules[j].temp=cold+(mix-cold)*0.35; } }
-    softStructures(c,scaled);
+    softStructures(c,scaled); stepElectrons(c,scaled);
   });
   if(state.playing) state.containers.forEach(c=>{ tryCombustion(c,pressureOf(c),noteOnce); tryHf(c,pressureOf(c),noteOnce); tryFuse(c,pressureOf(c),noteOnce,scaled); growValence(c); });
   if(Math.random()<scaled*1.4) reactions();
@@ -560,6 +563,11 @@ function tryHf(c,P,note){
     reactEnergy(made,220,c.name+": HF formation released energy");
     log(c.name+": H2 + F2 → 2 HF."); renderContainerList(); return true;
   }
+  const water=c.molecules.filter(m=>molKind(m)==="water");
+  if(hf.length&&water.length){
+    if(c.temperature<280||c.temperature>340||P.atm<0.10) note("hf-water","HF and water present, but H3O+ and F− need 280–340 K and at least 0.10 atm.");
+    else if(Math.random()<0.45){ const pos=hf[0].group.position.clone(); removeMol(hf[0]); removeMol(water[0]); spawn({formula:"H3O+",name:"Hydronium",atoms:[{el:"O",x:0,y:0,z:0},{el:"H",x:0.7,y:0.4,z:0},{el:"H",x:-0.7,y:0.4,z:0},{el:"H",x:0,y:-0.2,z:0.75}],bonds:[[0,1],[0,2],[0,3]],charge:"+",flags:{ion:true}},c,pos); spawn(ionDef("F","−"),c,pos.clone().add(new THREE.Vector3(1.1,0,0))); log(c.name+": HF + H2O → H3O+ and F−."); renderContainerList(); return true; }
+  }
   if(hf.length&&nh3.length){
     if(c.temperature<250||c.temperature>900||P.atm<0.08){ note("hf-nh3","HF and NH3 present, but need 250–900 K and 0.08 atm."); return false; }
     const pos=hf[0].group.position.clone();
@@ -568,6 +576,18 @@ function tryHf(c,P,note){
     log(c.name+": HF + NH3 → NH4F."); renderContainerList(); return true;
   }
   return false;
+}
+function spawnElectron(c,at){ const mesh=new THREE.Mesh(new THREE.SphereGeometry(.12,10,8), new THREE.MeshPhongMaterial({color:0x3d8dff,emissive:0x123a66})); mesh.position.copy(at); c.group.add(mesh); if(!c.freeElectrons) c.freeElectrons=[]; c.freeElectrons.push({mesh:mesh,velocity:new THREE.Vector3(Math.random()-.5,Math.random()-.5,Math.random()-.5).multiplyScalar(1.8)}); }
+function stepElectrons(c,scaled){
+  if(!c.freeElectrons) c.freeElectrons=[];
+  const metal=c.molecules.find(m=>m.atoms.length===1&&["Na","K"].includes(m.atoms[0].el)&&c.temperature>420);
+  if(metal&&Math.random()<scaled*0.15){ const el=metal.atoms[0].el, p=metal.group.position.clone(); removeMol(metal); spawn(ionDef(el,"+"),c,p); spawnElectron(c,p.clone().add(new THREE.Vector3(.4,.2,0))); log(c.name+": "+el+" released a free electron."); }
+  c.freeElectrons=c.freeElectrons.filter(e=>{
+    e.mesh.position.addScaledVector(e.velocity,scaled*2);
+    const hit=c.molecules.find(m=>m.group.position.distanceTo(e.mesh.position)<1.3&&(m.atoms.length===1&&["F","Cl","Br","I","O"].includes(m.atoms[0].el)||(m.charge==="+" )));
+    if(hit){ const p=hit.group.position.clone(); if(hit.atoms.length===1){ const el=hit.atoms[0].el; removeMol(hit); spawn(ionDef(el,"−"),c,p); } else hit.charge=""; c.group.remove(e.mesh); log(c.name+": free electron attached."); return false; }
+    const lim=c.size.x/2; if(e.mesh.position.length()>lim+2){ c.group.remove(e.mesh); return false; } return true;
+  });
 }
 function isFuel(m){
   if(m.flags&&m.flags.ion) return false;
