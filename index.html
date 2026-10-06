@@ -410,7 +410,19 @@ function step(dt){
       updateBonds(m);
       const p=m.group.position; ["x","y","z"].forEach(axis=>{ const lim=c.size[axis]/2-1.15; if(p[axis]>lim||p[axis]<-lim){ p[axis]=Math.max(-lim,Math.min(lim,p[axis])); m.velocity[axis]*=-.86; } });
     });
-    for(let i=0;i<c.molecules.length;i++) for(let j=i+1;j<c.molecules.length;j++){ const d=c.molecules[i].group.position.distanceTo(c.molecules[j].group.position); if(d<1.7&&d>0.001){ const push=c.molecules[i].group.position.clone().sub(c.molecules[j].group.position).normalize().multiplyScalar((1.7-d)*.5); c.molecules[i].group.position.add(push); c.molecules[j].group.position.sub(push); const hot=c.molecules[i].temp||c.temperature, cold=c.molecules[j].temp||c.temperature, mix=(hot+cold)/2; c.molecules[i].temp=hot+(mix-hot)*0.35; c.molecules[j].temp=cold+(mix-cold)*0.35; } }
+    for(let i=0;i<c.molecules.length;i++) for(let j=i+1;j<c.molecules.length;j++){
+      const a=c.molecules[i], b=c.molecules[j];
+      const delta=b.group.position.clone().sub(a.group.position);
+      const d=delta.length();
+      if(d<0.001) continue;
+      const n=delta.clone().multiplyScalar(1/d);
+      const closing=a.velocity.clone().sub(b.velocity).dot(n);
+      const friendly=canMeet(a,b)&&(closing>0.15||!!linkKind(a,b));
+      a.meet=a.meet||{}; b.meet=b.meet||{};
+      if(friendly){ a.meet[b.id]=1; b.meet[a.id]=1; if(d>1.8&&d<4.2){ a.group.position.add(n.clone().multiplyScalar(0.04)); b.group.position.sub(n.clone().multiplyScalar(0.04)); } }
+      else delete a.meet[b.id];
+      if(d<1.85){ const push=(1.85-d)*(friendly?0.18:0.55); a.group.position.add(n.clone().multiplyScalar(-push)); b.group.position.add(n.clone().multiplyScalar(push)); a.velocity.add(n.clone().multiplyScalar(-0.2)); b.velocity.add(n.clone().multiplyScalar(0.2)); const mix=((a.temp||c.temperature)+(b.temp||c.temperature))/2; a.temp=(a.temp||c.temperature)+(mix-(a.temp||c.temperature))*0.2; b.temp=(b.temp||c.temperature)+(mix-(b.temp||c.temperature))*0.2; }
+    }
     softStructures(c,scaled); stepElectrons(c,scaled);
   });
   if(state.playing) state.containers.forEach(c=>{ tryCombustion(c,pressureOf(c),noteOnce); tryHf(c,pressureOf(c),noteOnce); tryFuse(c,pressureOf(c),noteOnce,scaled); growValence(c); });
@@ -432,7 +444,7 @@ function reactions(){
     const salt=counts.salt&&counts.salt[0];
     if(salt&&counts.water&&counts.water.length){
       if(c.temperature<273||c.temperature>1073||P.atm<0.10) note("salt","salt and water present, but need 273–1073 K and at least 0.10 atm.");
-      else if(Math.random()<.55){ const p=salt.group.position.clone(); const metal=salt.atoms.find(a=>a.el==="Na"||a.el==="K").el; const halo=salt.atoms.find(a=>a.el!==metal).el; removeMol(salt); const left=spawn(ionDef(metal,"+"),c,p.clone().add(new THREE.Vector3(-.6,.2,0))); const right=spawn(ionDef(halo,"−"),c,p.clone().add(new THREE.Vector3(.6,-.2,0))); reactEnergy([left,right],-50,c.name+": dissolving absorbed energy"); log(c.name+": "+metal+halo+" dissolved into ions."); changed=true; }
+      else if(Math.random()<.55||goodMeet([salt].concat(counts.water))){ const p=salt.group.position.clone(); const metal=salt.atoms.find(a=>a.el==="Na"||a.el==="K").el; const halo=salt.atoms.find(a=>a.el!==metal).el; removeMol(salt); const left=spawn(ionDef(metal,"+"),c,p.clone().add(new THREE.Vector3(-.6,.2,0))); const right=spawn(ionDef(halo,"−"),c,p.clone().add(new THREE.Vector3(.6,-.2,0))); reactEnergy([left,right],-50,c.name+": dissolving absorbed energy"); log(c.name+": "+metal+halo+" dissolved into ions."); changed=true; }
     }
     if(tryCombustion(c,P,note)) changed=true;
     if((counts.NH3||[]).length&&(counts.water||[]).length){
@@ -513,6 +525,17 @@ function tryCombustion(c,P,note){
 }
 function atomCounts(m){ const counts={}; m.atoms.forEach(a=>counts[a.el]=(counts[a.el]||0)+1); return counts; }
 function reactEnergy(mols,delta,label){ if(state.mode==="student") return; mols.filter(Boolean).forEach(m=>{ m.temp=Math.max(20,(m.temp||298)+delta); }); log(label+" ("+(delta>=0?"released ":"absorbed ")+Math.abs(Math.round(delta))+" K)."); }
+function canMeet(a,b){
+  const ka=molKind(a), kb=molKind(b);
+  const pair=new Set([ka,kb]);
+  if(pair.has("acid")&&pair.has("base")) return true;
+  if(pair.has("water")&&(pair.has("salt")||pair.has("NH3")||pair.has("acid"))) return true;
+  if(pair.has("H2")&&(pair.has("O2")||kb==="F2"||ka==="F2"||b.atoms.every(x=>x.el==="F")||a.atoms.every(x=>x.el==="F"))) return true;
+  if((isFuel(a)&&kb==="O2")||(isFuel(b)&&ka==="O2")) return true;
+  if(isFragment(a)||isFragment(b)) return true;
+  return !!linkKind(a,b);
+}
+function goodMeet(list){ return list.length>1&&list.some((m,i)=>list.some((n,j)=>i!==j&&m.meet&&m.meet[n.id])); }
 function linkKind(a,b){
   if((a.flags&&a.flags.ion)||(b.flags&&b.flags.ion)||a.charge||b.charge) return "ion-dipole";
   const ka=molKind(a), kb=molKind(b);
@@ -587,7 +610,7 @@ function tryHf(c,P,note){
   const water=c.molecules.filter(m=>molKind(m)==="water");
   if(hf.length&&water.length){
     if(c.temperature<280||c.temperature>340||P.atm<0.10) note("hf-water","HF and water present, but H3O+ and F− need 280–340 K and at least 0.10 atm.");
-    else if(Math.random()<0.45){ const pos=hf[0].group.position.clone(); removeMol(hf[0]); removeMol(water[0]); spawn({formula:"H3O+",name:"Hydronium",atoms:[{el:"O",x:0,y:0,z:0},{el:"H",x:0.7,y:0.4,z:0},{el:"H",x:-0.7,y:0.4,z:0},{el:"H",x:0,y:-0.2,z:0.75}],bonds:[[0,1],[0,2],[0,3]],charge:"+",flags:{ion:true}},c,pos); spawn(ionDef("F","−"),c,pos.clone().add(new THREE.Vector3(1.1,0,0))); log(c.name+": HF + H2O → H3O+ and F−."); renderContainerList(); return true; }
+    else if(Math.random()<0.45||goodMeet(hf.concat(water))){ const pos=hf[0].group.position.clone(); removeMol(hf[0]); removeMol(water[0]); spawn({formula:"H3O+",name:"Hydronium",atoms:[{el:"O",x:0,y:0,z:0},{el:"H",x:0.7,y:0.4,z:0},{el:"H",x:-0.7,y:0.4,z:0},{el:"H",x:0,y:-0.2,z:0.75}],bonds:[[0,1],[0,2],[0,3]],charge:"+",flags:{ion:true}},c,pos); spawn(ionDef("F","−"),c,pos.clone().add(new THREE.Vector3(1.1,0,0))); log(c.name+": HF + H2O → H3O+ and F−."); renderContainerList(); return true; }
   }
   if(hf.length&&nh3.length){
     if(c.temperature<250||c.temperature>900||P.atm<0.08){ note("hf-nh3","HF and NH3 present, but need 250–900 K and 0.08 atm."); return false; }
@@ -778,7 +801,7 @@ function setSidebars(mode){
   toast(names[mode]||mode);
 }
 function cycleSidebars(){ setSidebars({both:"left",left:"right",right:"none",none:"both"}[state.sidebars||"both"]); }
-window.addEventListener("keydown",e=>{ if(state.fly) flyKeys[e.code]=true; if(state.fly&&["KeyW","KeyA","KeyS","KeyD","KeyC"].includes(e.code)) e.preventDefault(); if(!state.fly&&(e.code==="KeyA"||e.code==="KeyD")) e.preventDefault(); });
+window.addEventListener("keydown",e=>{ const typing=["INPUT","TEXTAREA","SELECT"].includes(document.activeElement&&document.activeElement.tagName); if(typing) return; if(state.fly) flyKeys[e.code]=true; if(state.fly&&["KeyW","KeyA","KeyS","KeyD","KeyC"].includes(e.code)) e.preventDefault(); if(!state.fly&&(e.code==="KeyA"||e.code==="KeyD")) e.preventDefault(); });
 window.addEventListener("keyup",e=>{ flyKeys[e.code]=false; });
 document.addEventListener("keydown",e=>{ const typing=["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName); if(e.key==="Escape"){ document.querySelectorAll(".modal-back").forEach(m=>m.classList.remove("show")); return; } if(typing) return; if(e.key===" "){ e.preventDefault(); document.getElementById("btnPlay").click(); } else if(e.key==="n"||e.key==="N") createContainer({name:"Beaker "+(state.containers.length+1)}); else if((e.key==="c"||e.key==="C")&&!state.fly) openCreator(); else if(e.key==="v"||e.key==="V"){ state.viewMode=!state.viewMode; applyView(); } else if(e.key==="p"||e.key==="P"){ state.precise=!state.precise; document.getElementById("optPrecise").checked=state.precise; document.body.classList.toggle("precise",state.precise); savePrefs(); } else if(e.key==="x"||e.key==="X") clearContainer(); else if(e.key==="f"||e.key==="F") focusContainer(current()); else if(e.key==="ArrowRight"||e.key==="ArrowLeft"){ const i=state.containers.findIndex(c=>c.id===state.selected); const next=state.containers[(i+(e.key==="ArrowRight"?1:state.containers.length-1))%state.containers.length]; if(next){ selectContainer(next.id); focusContainer(next); } } else if(e.key==="+"||e.key==="=") nudgeTemp(25); else if(e.key==="-"||e.key==="_") nudgeTemp(-25); else if(e.key==="b"||e.key==="B") cycleSidebars(); else if(e.key==="1") setUnit("K"); else if(e.key==="2") setUnit("C"); else if(e.key==="3") setUnit("F"); });
 function saneKelvin(k){ if(!isFinite(k)||Math.abs(k)<1e-6){ toast("Temperature cannot be 0 K."); return 298; } return k; }
