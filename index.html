@@ -389,8 +389,8 @@ function step(dt){
       updateBonds(m);
       const p=m.group.position; ["x","y","z"].forEach(axis=>{ const lim=c.size[axis]/2-1.15; if(p[axis]>lim||p[axis]<-lim){ p[axis]=Math.max(-lim,Math.min(lim,p[axis])); m.velocity[axis]*=-.86; } });
     });
-    for(let i=0;i<c.molecules.length;i++) for(let j=i+1;j<c.molecules.length;j++){ const d=c.molecules[i].group.position.distanceTo(c.molecules[j].group.position); if(d<1.7&&d>0.001){ const push=c.molecules[i].group.position.clone().sub(c.molecules[j].group.position).normalize().multiplyScalar((1.7-d)*.5); c.molecules[i].group.position.add(push); c.molecules[j].group.position.sub(push); const hot=c.molecules[i].temp||c.temperature, cold=c.molecules[j].temp||c.temperature, mix=(hot+cold)/2; c.molecules[i].temp=hot+(mix-hot)*0.35; c.molecules[j].temp=cold+(mix-cold)*0.35; }
-        if(d<4.5){ const di=dipole(c.molecules[i]), dj=dipole(c.molecules[j]); if(di&&dj&&di.dot(dj)<0){ const pull=c.molecules[j].group.position.clone().sub(c.molecules[i].group.position).normalize().multiplyScalar(0.02); c.molecules[i].group.position.add(pull); c.molecules[j].group.position.sub(pull); } } }
+    for(let i=0;i<c.molecules.length;i++) for(let j=i+1;j<c.molecules.length;j++){ const d=c.molecules[i].group.position.distanceTo(c.molecules[j].group.position); if(d<1.7&&d>0.001){ const push=c.molecules[i].group.position.clone().sub(c.molecules[j].group.position).normalize().multiplyScalar((1.7-d)*.5); c.molecules[i].group.position.add(push); c.molecules[j].group.position.sub(push); const hot=c.molecules[i].temp||c.temperature, cold=c.molecules[j].temp||c.temperature, mix=(hot+cold)/2; c.molecules[i].temp=hot+(mix-hot)*0.35; c.molecules[j].temp=cold+(mix-cold)*0.35; } }
+    softStructures(c,scaled);
   });
   if(state.playing) state.containers.forEach(c=>{ tryCombustion(c,pressureOf(c),noteOnce); tryHf(c,pressureOf(c),noteOnce); tryFuse(c,pressureOf(c),noteOnce,scaled); growValence(c); });
   if(Math.random()<scaled*1.4) reactions();
@@ -406,22 +406,22 @@ function reactions(){
     const acid=counts.acid&&counts.acid[0], base=counts.base&&counts.base[0];
     if(acid&&base){
       if(c.temperature<250||c.temperature>1400||P.atm<0.08) note("ab","acid and base present, but need 250–1400 K and at least 0.08 atm.");
-      else { const p=acid.group.position.clone().add(base.group.position).multiplyScalar(.5); const metal=base.atoms.find(a=>a.el==="Na"||a.el==="K").el; const halo=acid.atoms.find(a=>a.el!=="H").el; removeMol(acid); removeMol(base); spawn(saltDef(metal,halo),c,p.clone().add(new THREE.Vector3(-.4,0,0))); spawn(state.library.H2O,c,p.clone().add(new THREE.Vector3(.8,.3,0))); log(c.name+": neutralization → salt + H2O."); changed=true; }
+      else { const p=acid.group.position.clone().add(base.group.position).multiplyScalar(.5); const metal=base.atoms.find(a=>a.el==="Na"||a.el==="K").el; const halo=acid.atoms.find(a=>a.el!=="H").el; removeMol(acid); removeMol(base); const saltM=spawn(saltDef(metal,halo),c,p.clone().add(new THREE.Vector3(-.4,0,0))); const waterM=spawn(state.library.H2O,c,p.clone().add(new THREE.Vector3(.8,.3,0))); reactEnergy([saltM,waterM],140,c.name+": neutralization released energy"); log(c.name+": neutralization → salt + H2O."); changed=true; }
     }
     const salt=counts.salt&&counts.salt[0];
     if(salt&&counts.water&&counts.water.length){
       if(c.temperature<273||c.temperature>1073||P.atm<0.10) note("salt","salt and water present, but need 273–1073 K and at least 0.10 atm.");
-      else if(Math.random()<.55){ const p=salt.group.position.clone(); const metal=salt.atoms.find(a=>a.el==="Na"||a.el==="K").el; const halo=salt.atoms.find(a=>a.el!==metal).el; removeMol(salt); spawn(ionDef(metal,"+"),c,p.clone().add(new THREE.Vector3(-.6,.2,0))); spawn(ionDef(halo,"−"),c,p.clone().add(new THREE.Vector3(.6,-.2,0))); log(c.name+": "+metal+halo+" dissolveu-se in iões."); changed=true; }
+      else if(Math.random()<.55){ const p=salt.group.position.clone(); const metal=salt.atoms.find(a=>a.el==="Na"||a.el==="K").el; const halo=salt.atoms.find(a=>a.el!==metal).el; removeMol(salt); const left=spawn(ionDef(metal,"+"),c,p.clone().add(new THREE.Vector3(-.6,.2,0))); const right=spawn(ionDef(halo,"−"),c,p.clone().add(new THREE.Vector3(.6,-.2,0))); reactEnergy([left,right],-50,c.name+": dissolving absorbed energy"); log(c.name+": "+metal+halo+" dissolved into ions."); changed=true; }
     }
     if(tryCombustion(c,P,note)) changed=true;
     if((counts.NH3||[]).length&&(counts.water||[]).length){
       if(c.temperature<250||c.temperature>373||P.atm<0.50) note("nh3","NH3 and water present, but need 250–373 K and at least 0.50 atm.");
-      else if(Math.random()<.4){ const a=counts.NH3[0], w=counts.water[0], p=a.group.position.clone(); removeMol(a); removeMol(w); spawn(nh4Def(),c,p); spawn(ionDef("OH","−"),c,p.clone().add(new THREE.Vector3(.7,.2,0))); log(c.name+": NH3 + H2O → NH4+ e OH−."); changed=true; }
+      else if(Math.random()<.4){ const a=counts.NH3[0], w=counts.water[0], p=a.group.position.clone(); removeMol(a); removeMol(w); const left=spawn(nh4Def(),c,p); const right=spawn(ionDef("OH","−"),c,p.clone().add(new THREE.Vector3(.7,.2,0))); reactEnergy([left,right],-35,c.name+": ammonia in water absorbed energy"); log(c.name+": NH3 + H2O → NH4+ and OH−."); changed=true; }
     }
     if(tryFuse(c,P,note)) changed=true;
     if(c.temperature>1400){
       if(P.atm>=2.5) note("dec","decomposition temperature, but pressure is too high (keep it below 2.50 atm).");
-      else { const victim=c.molecules.find(m=>m.atoms.length>1&&!(m.flags&&m.flags.ion)&&Math.random()<.25); if(victim){ const p=victim.group.position.clone(), atoms=victim.atoms.map(a=>a.el), formula=victim.formula; removeMol(victim); atoms.forEach((el,i)=>spawn({formula:el,name:ELEMENTS[el].name+" isolated",atoms:[{el:el,x:0,y:0,z:0}],bonds:[],flags:{fragment:true,isolated:true}},c,p.clone().add(new THREE.Vector3((i-1)*.7,.3,0)))); log(c.name+": decomposition of "+formula+"."); changed=true; } }
+      else { const victim=c.molecules.find(m=>m.atoms.length>1&&!(m.flags&&m.flags.ion)&&Math.random()<.25); if(victim){ const p=victim.group.position.clone(), atoms=victim.atoms.map(a=>a.el), formula=victim.formula; removeMol(victim); const bits=atoms.map((el,i)=>spawn({formula:el,name:ELEMENTS[el].name+" isolated",atoms:[{el:el,x:0,y:0,z:0}],bonds:[],flags:{fragment:true,isolated:true}},c,p.clone().add(new THREE.Vector3((i-1)*.7,.3,0)))); reactEnergy(bits,-80,c.name+": decomposition absorbed energy"); log(c.name+": decomposition of "+formula+"."); changed=true; } }
     }
   });
   if(changed) renderContainerList();
@@ -486,10 +486,39 @@ function tryCombustion(c,P,note){
   for(let n=0;n<plan.bal.n2;n++) put(state.library.N2);
   for(let n=0;n<plan.bal.so2;n++) put({formula:"SO2",name:"Sulfur dioxide",atoms:[{el:"S",x:0,y:0,z:0},{el:"O",x:-1.43,y:0,z:0},{el:"O",x:1.43,y:0,z:0}],bonds:[[0,1],[0,2]]});
   log(c.name+": combustion "+plan.bal.fuel+" "+plan.fuel.formula+" + "+plan.bal.o2+" O2 → "+plan.bal.co2+" CO2 + "+plan.bal.h2o+" H2O.");
+  reactEnergy(c.molecules.filter(m=>m.group.position.distanceTo(pos)<3),160,c.name+": combustion released energy");
   renderContainerList();
   return true;
 }
 function atomCounts(m){ const counts={}; m.atoms.forEach(a=>counts[a.el]=(counts[a.el]||0)+1); return counts; }
+function reactEnergy(mols,delta,label){ if(state.mode==="student") return; mols.filter(Boolean).forEach(m=>{ m.temp=Math.max(20,(m.temp||298)+delta); }); log(label+" ("+(delta>=0?"released ":"absorbed ")+Math.abs(Math.round(delta))+" K)."); }
+function linkKind(a,b){
+  if((a.flags&&a.flags.ion)||(b.flags&&b.flags.ion)||a.charge||b.charge) return "ion-dipole";
+  const ka=molKind(a), kb=molKind(b);
+  if(["water","acid","NH3"].includes(ka)&&["water","acid","NH3"].includes(kb)) return "hydrogen bond";
+  if(dipole(a)&&dipole(b)) return "dipole";
+  return null;
+}
+function placeLink(mesh,a,b){ const dir=new THREE.Vector3().subVectors(b.group.position,a.group.position); const len=dir.length(); if(len<0.05) return; mesh.position.copy(a.group.position).lerp(b.group.position,.5); mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize()); mesh.scale.set(1,len,1); }
+function softStructures(c,scaled){
+  if(!c.links) c.links=[];
+  c.links=c.links.filter(l=>{
+    const a=c.molecules.find(m=>m.id===l.a), b=c.molecules.find(m=>m.id===l.b);
+    const hot=((a&&a.temp)||298)+((b&&b.temp)||298);
+    if(!a||!b||a.group.position.distanceTo(b.group.position)>5.4||hot>1100||Math.random()<scaled*0.015){ if(l.mesh) c.group.remove(l.mesh); if(a&&b) noteOnce("fall"+l.a+l.b,c.name+": "+l.kind+" between "+a.formula+" and "+b.formula+" collapsed."); return false; }
+    const pull=b.group.position.clone().sub(a.group.position); if(pull.length()>2.6){ pull.normalize().multiplyScalar(0.012); a.group.position.add(pull); b.group.position.sub(pull); }
+    placeLink(l.mesh,a,b); return true;
+  });
+  for(let i=0;i<c.molecules.length;i++) for(let j=i+1;j<c.molecules.length;j++){
+    const a=c.molecules[i], b=c.molecules[j];
+    if(c.links.some(l=>(l.a===a.id&&l.b===b.id)||(l.a===b.id&&l.b===a.id))) continue;
+    const kind=linkKind(a,b), d=a.group.position.distanceTo(b.group.position);
+    if(!kind||d>3.6||Math.random()>0.03) continue;
+    const mesh=new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,1,6), new THREE.MeshBasicMaterial({color:kind==="hydrogen bond"?0x8fd0ff:kind==="ion-dipole"?0xffd27a:0x9ad7c8,transparent:true,opacity:.4}));
+    c.group.add(mesh); c.links.push({a:a.id,b:b.id,kind:kind,mesh:mesh});
+    noteOnce("link"+a.id+b.id,c.name+": "+kind+" holds "+a.formula+" and "+b.formula+" without a covalent bond.");
+  }
+}
 function freeSlots(m){ const used=m.atoms.map(()=>0); m.bonds.forEach(b=>{ used[b.i]++; used[b.j]++; }); return used.map((u,i)=>Math.max(0,(VALENCE[m.atoms[i].el]||1)-u)); }
 function dipole(m){ if(!m.atoms.length) return null; let acc=new THREE.Vector3(); m.atoms.forEach(a=>{ acc.add(a.mesh.position.clone().multiplyScalar((EN_TABLE[a.el]||2)-2.2)); }); return acc.lengthSq()>0.01?acc.normalize():null; }
 function growValence(c){
@@ -497,6 +526,7 @@ function growValence(c){
   if(open.length<2) return false;
   for(let i=0;i<open.length;i++) for(let j=i+1;j<open.length;j++){
     if(open[i].group.position.distanceTo(open[j].group.position)>2.8) continue;
+    if(!(c.links||[]).some(l=>(l.a===open[i].id&&l.b===open[j].id)||(l.a===open[j].id&&l.b===open[i].id))) continue;
     const atoms=open[i].atoms.map(a=>a.el).concat(open[j].atoms.map(a=>a.el));
     if(atoms.length>8) continue;
     const built=assembleMolecule(atoms);
@@ -509,7 +539,7 @@ function growValence(c){
     const temp=((open[i].temp||c.temperature)+(open[j].temp||c.temperature))/2;
     removeMol(open[i]); removeMol(open[j]);
     const spawned=spawn(known||{formula:formula,name:oh?"Hydroxide, valence open":"valence product "+formula,atoms:built.atoms,bonds:built.bonds,charge:oh?"−":"",flags:{fused:true,open:!water}},c,pos);
-    spawned.temp=temp;
+    spawned.temp=temp; reactEnergy([spawned],water?70:-10,c.name+": valence join energy");
     log(c.name+": valence join → "+formula+(oh?" (still wants another bond)":"")+".");
     renderContainerList();
     return true;
@@ -526,7 +556,8 @@ function tryHf(c,P,note){
     if(c.temperature<250||P.atm<0.08){ note("hf-make","H2 and F2 present, but HF formation needs above 250 K and 0.08 atm."); return false; }
     const pos=h2[0].group.position.clone();
     removeMol(h2[0]); removeMol(f2[0]);
-    spawn(state.library.HF,c,pos); spawn(state.library.HF,c,pos.clone().add(new THREE.Vector3(1,0.3,0)));
+    const made=[spawn(state.library.HF,c,pos), spawn(state.library.HF,c,pos.clone().add(new THREE.Vector3(1,0.3,0)))];
+    reactEnergy(made,220,c.name+": HF formation released energy");
     log(c.name+": H2 + F2 → 2 HF."); renderContainerList(); return true;
   }
   if(hf.length&&nh3.length){
