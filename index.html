@@ -74,7 +74,7 @@
     <div class="logo"><div class="mark"></div><div>MOLLAB 3D<small>Molecular simulator</small></div></div>
     <div id="simInfo">Angstrom geometry · thermal motion · pressure P = nRT/V<br>1 unit = 1 cm · each visible molecule = 0.002 mol</div>
     <div class="head-actions">
-      <button id="btnFly">Camera</button>
+      <button id="btnExamples" style="display:none">Ready examples</button>
       <button id="btnSettings">Settings</button>
       <button id="btnInfo">About</button>
       <button id="btnPlay" class="primary">Pause</button>
@@ -183,6 +183,7 @@
   <label class="check"><input id="optMols" type="checkbox" checked> Show molecule labels</label>
   <label class="check"><input id="optPrecise" type="checkbox"> Precise mode</label>
   <label class="check"><input id="optGrid" type="checkbox" checked> Show grid</label>
+  <label class="check"><input id="optWalls" type="checkbox" checked> Show walls</label>
   <label class="check"><input id="optGravity" type="checkbox"> Gravity</label>
   <label class="field">Force <input id="gravityForce" type="number" step="0.1" value="1"><b>any</b></label>
   <label class="field">Difficulty <select id="modePick"><option value="student">Student</option><option value="advanced">Advanced</option><option value="scientist">Scientist</option></select><b></b></label>
@@ -222,7 +223,18 @@
     <div class="row" style="margin-top:12px"><button id="saveMol" class="primary">Save and use</button><button id="closeCreator">Close</button></div>
   </div>
 </div></div>
-<div id="loginMode" class="modal-back"><div class="sheet">
+<div id="examples" class="modal-back"><div class="sheet">
+  <h2>Ready examples</h2>
+  <p class="help">Each example clears the beaker and starts a scene that is ready to watch.</p>
+  <div class="clist">
+    <button class="citem" data-example="acid">Acid and base</button>
+    <button class="citem" data-example="burn">Combustion</button>
+    <button class="citem" data-example="salt">Salt in water</button>
+    <button class="citem" data-example="hf">HF and water</button>
+    <button class="citem" data-example="form">Atom formation</button>
+  </div>
+  <button id="closeExamples" style="margin-top:10px">Close</button>
+</div></div>
   <h2>Choose a mode</h2>
   <p class="help">Student: preset molecules, mild heat, and the heat tool. Advanced: formula builder and more beakers. Scientist: everything, including the MolView builder.</p>
   <div class="row"><button id="pickStudent" class="primary">Student</button><button id="pickAdvanced">Advanced</button><button id="pickScientist">Scientist</button></div>
@@ -654,7 +666,7 @@ function applyMode(){
   document.getElementById("btnContainer").style.display=state.containers.length>=rule.beakers?"none":"inline-block";
   document.getElementById("temp").max=rule.temp;
   document.getElementById("heatTarget").max=rule.temp;
-  document.getElementById("modePick").value=state.mode;
+  document.getElementById("btnExamples").style.display=state.mode==="student"?"inline-block":"none";
   document.getElementById("maxMols").max=rule.mols;
   if(state.maxMols>rule.mols) state.maxMols=rule.mols;
   document.getElementById("maxMols").value=state.maxMols;
@@ -693,7 +705,24 @@ function setTab(id){ document.querySelectorAll("#left .tabs button").forEach(b=>
 document.getElementById("tabMol").onclick=()=>setTab("tabMol"); document.getElementById("tabAtom").onclick=()=>setTab("tabAtom"); document.getElementById("tabMine").onclick=()=>setTab("tabMine");
 document.getElementById("tabAdjust").onclick=()=>{ document.getElementById("paneAdjust").style.display=""; document.getElementById("paneTools").style.display="none"; document.getElementById("tabAdjust").classList.add("on"); document.getElementById("tabTools").classList.remove("on"); };
 document.getElementById("tabTools").onclick=()=>{ document.getElementById("paneAdjust").style.display="none"; document.getElementById("paneTools").style.display=""; document.getElementById("tabTools").classList.add("on"); document.getElementById("tabAdjust").classList.remove("on"); };
-document.getElementById("btnSettings").onclick=()=>document.getElementById("settings").classList.add("show");
+function resetLab(){ state.containers.slice().forEach(c=>{ [...c.molecules].forEach(removeMol); if(c.links) c.links.forEach(l=>{ if(l.mesh) c.group.remove(l.mesh); }); scene.remove(c.group); }); state.containers=[]; document.getElementById("log").innerHTML=""; }
+function loadExample(kind){
+  resetLab();
+  const spec={
+    acid:{name:"Acid and base",temp:298,size:8,items:[["HCl",2],["NaOH",2]],note:"Watch for salt and water."},
+    burn:{name:"Combustion",temp:700,size:8,items:[["H2",2],["O2",1]],note:"2 H2 + O2 should make water."},
+    salt:{name:"Salt in water",temp:298,size:8,items:[["NaCl",2],["H2O",4]],note:"The salt can split into ions."},
+    hf:{name:"HF and water",temp:310,size:8,items:[["HF",2],["H2O",2]],note:"Look for H3O+ and F−."},
+    form:{name:"Atom formation",temp:298,size:8,items:[["H",2],["O",1]],note:"H and O can form OH−, then water."}
+  }[kind];
+  if(!spec) return;
+  const c=createContainer({name:spec.name,temperature:spec.temp,x:spec.size,y:spec.size,z:spec.size});
+  if(c){ c.temperature=spec.temp; setControl("temp",c.temperature); spec.items.forEach(([f,n])=>addSubstance(f,n)); toast(spec.note); }
+  document.getElementById("examples").classList.remove("show");
+}
+document.getElementById("btnExamples").onclick=()=>document.getElementById("examples").classList.add("show");
+document.getElementById("closeExamples").onclick=()=>document.getElementById("examples").classList.remove("show");
+document.querySelectorAll("[data-example]").forEach(b=>b.onclick=()=>loadExample(b.dataset.example));
 document.getElementById("closeSettings").onclick=()=>document.getElementById("settings").classList.remove("show");
 document.getElementById("btnInfo").onclick=()=>document.getElementById("about").classList.add("show");
 document.getElementById("closeAbout").onclick=()=>document.getElementById("about").classList.remove("show");
