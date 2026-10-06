@@ -75,6 +75,7 @@
     <div id="simInfo">Angstrom geometry · thermal motion · pressure P = nRT/V<br>1 unit = 1 cm · each visible molecule = 0.002 mol</div>
     <div class="head-actions">
       <button id="btnExamples" style="display:none">Ready examples</button>
+      <button id="btnFly">Camera</button>
       <button id="btnSettings">Settings</button>
       <button id="btnInfo">About</button>
       <button id="btnPlay" class="primary">Pause</button>
@@ -235,6 +236,7 @@
   </div>
   <button id="closeExamples" style="margin-top:10px">Close</button>
 </div></div>
+<div id="loginMode" class="modal-back"><div class="sheet">
   <h2>Choose a mode</h2>
   <p class="help">Student: preset molecules, mild heat, and the heat tool. Advanced: formula builder and more beakers. Scientist: everything, including the MolView builder.</p>
   <div class="row"><button id="pickStudent" class="primary">Student</button><button id="pickAdvanced">Advanced</button><button id="pickScientist">Scientist</button></div>
@@ -720,6 +722,7 @@ function loadExample(kind){
   if(c){ c.temperature=spec.temp; setControl("temp",c.temperature); spec.items.forEach(([f,n])=>addSubstance(f,n)); toast(spec.note); }
   document.getElementById("examples").classList.remove("show");
 }
+function bind(id,event,fn){ const el=document.getElementById(id); if(el) el[event]=fn; return el; }
 document.getElementById("btnExamples").onclick=()=>document.getElementById("examples").classList.add("show");
 document.getElementById("closeExamples").onclick=()=>document.getElementById("examples").classList.remove("show");
 document.querySelectorAll("[data-example]").forEach(b=>b.onclick=()=>loadExample(b.dataset.example));
@@ -740,7 +743,7 @@ document.getElementById("btnHeat").onclick=()=>{ state.heatTarget=toK(document.g
 document.getElementById("gfxLow").onclick=()=>{ state.gfx="low"; applyGfx(); savePrefs(); };
 document.getElementById("gfxMid").onclick=()=>{ state.gfx="mid"; applyGfx(); savePrefs(); };
 document.getElementById("gfxHigh").onclick=()=>{ state.gfx="high"; applyGfx(); savePrefs(); };
-document.getElementById("btnFly").onclick=()=>{ state.fly=!state.fly; document.getElementById("btnFly").classList.toggle("on",state.fly); if(controls.enabled!=null) controls.enabled=!state.fly; if(state.fly){ const dir=controls.target.clone().sub(camera.position).normalize(); lookYaw=Math.atan2(dir.x,-dir.z); lookPitch=Math.asin(Math.max(-1,Math.min(1,dir.y))); syncLook(); } toast(state.fly?"Camera mode: WASD, Shift up, C down, drag to look around.":"Orbit camera restored. A and D stay blocked."); };
+bind("btnFly","onclick",()=>{ state.fly=!state.fly; document.getElementById("btnFly").classList.toggle("on",state.fly); if(controls.enabled!=null) controls.enabled=!state.fly; if(state.fly){ const dir=controls.target.clone().sub(camera.position).normalize(); lookYaw=Math.atan2(dir.x,-dir.z); lookPitch=Math.asin(Math.max(-1,Math.min(1,dir.y))); syncLook(); } toast(state.fly?"Camera mode: WASD, Shift up, C down, drag to look around.":"Orbit camera restored. A and D stay blocked."); });
 document.getElementById("toggleLeft").onclick=()=>setSidebars(document.getElementById("left").classList.contains("is-hidden")?"both":"right");
 document.getElementById("toggleRight").onclick=()=>setSidebars(document.getElementById("right").classList.contains("is-hidden")?"both":"left");
 function setSidebars(mode){
@@ -774,7 +777,7 @@ window.addEventListener("resize",()=>{ camera.aspect=view.clientWidth/Math.max(1
 const creator={atoms:[],bonds:[],selected:-1,element:"C",mode:"place"};
 let cRenderer,cScene,cCamera,cControls,cGroup,cPlane;
 function openCreator(){ if(!modeRules().creator){ toast("The MolView builder is only in Scientist mode."); return; } document.getElementById("creator").classList.add("show"); if(!cRenderer) initCreator(); resizeCreator(); rebuildCreator(); }
-function setMode(mode){ state.mode=mode; localStorage.setItem("mollab-mode",mode); document.getElementById("loginMode").classList.remove("show"); applyMode(); savePrefs(); toast(mode+" mode."); }
+function setMode(mode){ state.mode=mode; localStorage.setItem("mollab-mode",mode); const box=document.getElementById("loginMode"); if(box) box.classList.remove("show"); applyMode(); savePrefs(); toast(mode+" mode."); }
 function initCreator(){
   const host=document.getElementById("creatorView"); cRenderer=new THREE.WebGLRenderer({antialias:true}); cRenderer.setSize(host.clientWidth,host.clientHeight); cRenderer.setClearColor(0x070e1b,1); host.appendChild(cRenderer.domElement);
   cScene=new THREE.Scene(); cCamera=new THREE.PerspectiveCamera(45,host.clientWidth/Math.max(1,host.clientHeight),.1,100); cCamera.position.set(4,4,7); cControls=makeControls(cCamera,cRenderer.domElement); if(cControls.mouseButtons) cControls.mouseButtons.LEFT=THREE.MOUSE.PAN;
@@ -803,7 +806,7 @@ document.getElementById("modePick").onchange=()=>setMode(document.getElementById
 document.getElementById("pickStudent").onclick=()=>setMode("student");
 document.getElementById("pickAdvanced").onclick=()=>setMode("advanced");
 document.getElementById("pickScientist").onclick=()=>setMode("scientist");
-renderLib(); createContainer({name:"Beaker 1",temperature:298}); addSubstance("H2O",6); applyGfx(); applyView(); applyMode(); if(!localStorage.getItem("mollab-mode")) document.getElementById("loginMode").classList.add("show"); log("Click a beaker to focus the camera. Tools are in the right tab."); animate();
+renderLib(); createContainer({name:"Beaker 1",temperature:298}); addSubstance("H2O",6); applyGfx(); applyView(); applyMode(); if(!localStorage.getItem("mollab-mode")){ const box=document.getElementById("loginMode"); if(box) box.classList.add("show"); } log("Click a beaker to focus the camera. Tools are in the right tab."); animate();
 </script>
 </body>
 </html>
