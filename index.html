@@ -524,26 +524,29 @@ function softStructures(c,scaled){
 }
 function freeSlots(m){ const used=m.atoms.map(()=>0); m.bonds.forEach(b=>{ used[b.i]++; used[b.j]++; }); return used.map((u,i)=>Math.max(0,(VALENCE[m.atoms[i].el]||1)-u)); }
 function dipole(m){ if(!m.atoms.length) return null; let acc=new THREE.Vector3(); m.atoms.forEach(a=>{ acc.add(a.mesh.position.clone().multiplyScalar((EN_TABLE[a.el]||2)-2.2)); }); return acc.lengthSq()>0.01?acc.normalize():null; }
+function isFragment(m){ return !!(m.flags&&(m.flags.isolated||m.flags.fragment||m.flags.open))||(m.atoms.length===1&&!(m.flags&&m.flags.ion))||m.formula==="OH−"||m.formula==="OH"; }
 function growValence(c){
-  const open=c.molecules.filter(m=>freeSlots(m).some(n=>n>0));
+  const open=c.molecules.filter(isFragment);
   if(open.length<2) return false;
   for(let i=0;i<open.length;i++) for(let j=i+1;j<open.length;j++){
+    if(!isFragment(open[i])||!isFragment(open[j])) continue;
     if(open[i].group.position.distanceTo(open[j].group.position)>2.8) continue;
-    if(!(c.links||[]).some(l=>(l.a===open[i].id&&l.b===open[j].id)||(l.a===open[j].id&&l.b===open[i].id))) continue;
     const atoms=open[i].atoms.map(a=>a.el).concat(open[j].atoms.map(a=>a.el));
-    if(atoms.length>8) continue;
-    const built=assembleMolecule(atoms);
+    if(atoms.length>4) continue;
     const counts={}; atoms.forEach(el=>counts[el]=(counts[el]||0)+1);
     const water=counts.H===2&&counts.O===1&&Object.keys(counts).length===2;
     const oh=counts.H===1&&counts.O===1&&Object.keys(counts).length===2;
-    const formula=water?"H2O":oh?"OH−":Object.keys(counts).sort().map(el=>el+(counts[el]>1?counts[el]:"")).join("");
-    const known=water?state.library.H2O:null;
+    const pair=atoms.length===2;
+    if(!water&&!oh&&!pair) continue;
+    const built=assembleMolecule(atoms);
+    const formula=water?"H2O":oh?"OH−":(atoms[0]===atoms[1]?atoms[0]+"2":atoms.join(""));
+    const known=water?state.library.H2O:state.library[formula];
     const pos=open[i].group.position.clone().add(open[j].group.position).multiplyScalar(.5);
     const temp=((open[i].temp||c.temperature)+(open[j].temp||c.temperature))/2;
     removeMol(open[i]); removeMol(open[j]);
-    const spawned=spawn(known||{formula:formula,name:oh?"Hydroxide, valence open":"valence product "+formula,atoms:built.atoms,bonds:built.bonds,charge:oh?"−":"",flags:{fused:true,open:!water}},c,pos);
+    const spawned=spawn(known||{formula:formula,name:oh?"Hydroxide, valence open":"valence product "+formula,atoms:built.atoms,bonds:built.bonds,charge:oh?"−":"",flags:{fused:true,open:!!oh}},c,pos);
     spawned.temp=temp; reactEnergy([spawned],water?70:-10,c.name+": valence join energy");
-    log(c.name+": valence join → "+formula+(oh?" (still wants another bond)":"")+".");
+    log(c.name+": fragment bond → "+formula+". A weak intermolecular link does not do this.");
     renderContainerList();
     return true;
   }
